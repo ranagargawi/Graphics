@@ -1,0 +1,44 @@
+<VRTDataset rasterXSize="3601" rasterYSize="3601">
+  <SRS dataAxisToSRSAxisMapping="2,1">GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],AUTHORITY["EPSG","4326"]]</SRS>
+  <GeoTransform>  3.4999861111111109e+01,  2.7777777777777778e-04,  0.0000000000000000e+00,  3.2000138888888891e+01,  0.0000000000000000e+00, -2.7777777777777778e-04</GeoTransform>
+  <Metadata>
+    <MDI key="AREA_OR_POINT">Point</MDI>
+    <MDI key="DTED_CompilationDate">0002</MDI>
+    <MDI key="DTED_DataEdition">02</MDI>
+    <MDI key="DTED_DigitizingSystem">SRTM      </MDI>
+    <MDI key="DTED_HorizontalAccuracy">0012</MDI>
+    <MDI key="DTED_HorizontalDatum">WGS84</MDI>
+    <MDI key="DTED_MaintenanceDate">0000</MDI>
+    <MDI key="DTED_MaintenanceDescription">0000</MDI>
+    <MDI key="DTED_MatchMergeDate">0000</MDI>
+    <MDI key="DTED_MatchMergeVersion">A</MDI>
+    <MDI key="DTED_NimaDesignator">DTED2</MDI>
+    <MDI key="DTED_OriginLatitude">0310000N</MDI>
+    <MDI key="DTED_OriginLongitude">0350000E</MDI>
+    <MDI key="DTED_Producer">USCNIMA </MDI>
+    <MDI key="DTED_RelHorizontalAccuracy">NA  </MDI>
+    <MDI key="DTED_RelVerticalAccuracy">0006</MDI>
+    <MDI key="DTED_SecurityCode_DSI">U</MDI>
+    <MDI key="DTED_SecurityCode_UHL">U  </MDI>
+    <MDI key="DTED_UniqueRef_DSI">H05 091        </MDI>
+    <MDI key="DTED_UniqueRef_UHL">H05 091     </MDI>
+    <MDI key="DTED_VerticalAccuracy_ACC">0005</MDI>
+    <MDI key="DTED_VerticalAccuracy_UHL">0005</MDI>
+    <MDI key="DTED_VerticalDatum">E96</MDI>
+  </Metadata>
+  <Metadata domain="IMAGE_STRUCTURE">
+    <MDI key="INTERLEAVE">BAND</MDI>
+  </Metadata>
+  <VRTRasterBand dataType="Int16" band="1" blockXSize="3601" blockYSize="1">
+    <NoDataValue>-32767</NoDataValue>
+    <UnitType>m</UnitType>
+    <ColorInterp>Gray</ColorInterp>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">pic.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="3601" RasterYSize="3601" DataType="Int16" BlockXSize="3601" BlockYSize="1" />
+      <SrcRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+      <DstRect xOff="0" yOff="0" xSize="3601" ySize="3601" />
+    </SimpleSource>
+  </VRTRasterBand>
+</VRTDataset>
