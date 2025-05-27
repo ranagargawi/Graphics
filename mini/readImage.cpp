@@ -87,7 +87,7 @@ void buildMesh(float heightScale = 2.0f) {
             indices.push_back(b);
 
         }
-        std::cout << "Building triangles from "<<y << " heightmap\n";
+       // std::cout << "Building triangles from "<<y << " heightmap\n";
 
     }
 
@@ -128,18 +128,13 @@ void buildMesh(float heightScale = 2.0f) {
 void display() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glLoadIdentity();
-    // gluLookAt(400, 300, 800,   // Eye position: directly above center
-    //     400, 300, 0,     // Look-at position: center of the terrain
-    //     0, 1, 0);        // Up vector: +Y is up on screen
-    
-    // Compute direction vector from yaw and pitch
+
     float radYaw = yaw * M_PI / 180.0f;
     float radPitch = pitch * M_PI / 180.0f;
     float dirX = cos(radPitch) * cos(radYaw);
     float dirY = sin(radPitch);
     float dirZ = cos(radPitch) * sin(radYaw);
 
-    // Target the camera is looking at
     float targetX = camX + dirX;
     float targetY = camY + dirY;
     float targetZ = camZ + dirZ;
@@ -148,69 +143,57 @@ void display() {
 
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
-    //GLfloat lightPos[] = { 0, 0, 300, 1 };
-    GLfloat lightPos[] = { 400, 400, 800, 1 }; //CHANGED
-
+    GLfloat lightPos[] = { 400, 400, 800, 1 };
     glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
 
-    
-
     glBegin(GL_TRIANGLES);
-    for (size_t i = 0; i < indices.size(); i+=3) {// chat gpt changed it to be i+=3
-        int triID = i / 3;
-        if (std::find(pickedIDs.begin(), pickedIDs.end(), triID) != pickedIDs.end()) {
-            glColor3f(1.0f, 1.0f, 1.0f);
-            for (int j = 0; j < 3; ++j) {
-                const MyVec3f &v = vertices[indices[i + j]];
-                const MyVec3f &n = normals[indices[i + j]]; 
-                glNormal3f(n.x, n.y, n.z);
-                glVertex3f(v.x, v.y, v.z);
+    for (size_t i = 0; i < indices.size(); i += 3) {
+        for (int j = 0; j < 3; ++j) {
+            int vertexIdx = indices[i + j];
+            const MyVec3f &v = vertices[vertexIdx];
+            const MyVec3f &n = normals[vertexIdx];
+
+            if (std::find(pickedIDs.begin(), pickedIDs.end(), vertexIdx) != pickedIDs.end()) {
+                continue; // skip this, draw later as a square
             }
-        }
-        else{
-            for (int j = 0; j < 3; ++j) {
-                const MyVec3f &v = vertices[indices[i + j]];
-                const MyVec3f &n = normals[indices[i + j]];
 
-                // Normalize height to [0, 1] for color mapping
-                float t = v.y / 51.0f; // or adjust if scaled differently
-
-                float r, g, b;
-                if (t < 0.25f) {
-                    // Lowest: Blue
-                    r = 0.0f;
-                    g = 0.0f;
-                    b = 1.0f;
-                } else if (t < 0.5f) {
-                    // Blue to Green
-                    r = 0.0f;
-                    g = (t - 0.25f) * 4.0f;
-                    b = 1.0f - (t - 0.25f) * 4.0f;
-                } else if (t < 0.75f) {
-                    // Green to Yellow
-                    r = (t - 0.5f) * 4.0f;
-                    g = 1.0f;
-                    b = 0.0f;
-                } else {
-                    // Yellow to Red
-                    r = 1.0f;
-                    g = 1.0f - (t - 0.75f) * 4.0f;
-                    b = 0.0f;
-                }
-
-                glColor3f(r, g, b);
-
-                glNormal3f(n.x, n.y, n.z);
-                glVertex3f(v.x, v.y, v.z);
+            float t = v.y / 51.0f;
+            float r, g, b;
+            if (t < 0.25f) {
+                r = 0.0f; g = 0.0f; b = 1.0f;
+            } else if (t < 0.5f) {
+                r = 0.0f; g = (t - 0.25f) * 4.0f; b = 1.0f - (t - 0.25f) * 4.0f;
+            } else if (t < 0.75f) {
+                r = (t - 0.5f) * 4.0f; g = 1.0f; b = 0.0f;
+            } else {
+                r = 1.0f; g = 1.0f - (t - 0.75f) * 4.0f; b = 0.0f;
             }
+
+            glColor3f(r, g, b);
+            glNormal3f(n.x, n.y, n.z);
+            glVertex3f(v.x, v.y, v.z);
         }
-        
     }
-    
     glEnd();
+
+    // Draw picked vertices as white squares
+    float size = 2.0f;
+    glDisable(GL_LIGHTING);
+    glBegin(GL_QUADS);
+    glColor3f(1.0f, 1.0f, 1.0f);
+    for (int idx : pickedIDs) {
+        const MyVec3f &v = vertices[idx];
+        glVertex3f(v.x - size, v.y, v.z - size);
+        glVertex3f(v.x + size, v.y, v.z - size);
+        glVertex3f(v.x + size, v.y, v.z + size);
+        glVertex3f(v.x - size, v.y, v.z + size);
+    }
+    glEnd();
+    glEnable(GL_LIGHTING);
 
     glutSwapBuffers();
 }
+
 
 void reshape(int w, int h) {
     glViewport(0, 0, w, h);
@@ -257,26 +240,29 @@ void renderForPicking() {
 }
 
 
-// mouse click option for picking
+
 void mouseClick(int button, int state, int x, int y) {
     if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
         GLint viewport[4];
         glGetIntegerv(GL_VIEWPORT, viewport);
 
-        renderForPicking();  // Draw the scene using ID colors
+        renderForPicking();
 
-        // Read the pixel under the mouse
         GLubyte pixel[4];
         glReadPixels(x, viewport[3] - y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
 
-        int id = pixel[0] + pixel[1] * 256 + pixel[2] * 256 * 256;
+        int triID = pixel[0] + pixel[1] * 256 + pixel[2] * 256 * 256;
 
-        // Add the picked id only if valid and not already picked
-        if (id >= 0 && std::find(pickedIDs.begin(), pickedIDs.end(), id) == pickedIDs.end()) {
-            pickedIDs.push_back(id);
-        
+        if (triID >= 0 && triID * 3 + 2 < indices.size()) {
+            for (int j = 0; j < 3; ++j) {
+                int vIdx = indices[triID * 3 + j];
+                if (std::find(pickedIDs.begin(), pickedIDs.end(), vIdx) == pickedIDs.end()) {
+                    pickedIDs.push_back(vIdx);
+                }
+            }
         }
-        glutPostRedisplay(); // Ask OpenGL to redraw the scene
+
+        glutPostRedisplay();
     }
 }
 
@@ -356,22 +342,22 @@ int main(int argc, char** argv) {
        //cv::GaussianBlur(heightMap, heightMap, cv::Size(3, 3), 0);
    cv::GaussianBlur(heightMap, heightMap, cv::Size(3, 3), 0);
 
-    imshow("Processed Heightmap", heightMap);
-waitKey(1000);
+    //imshow("Processed Heightmap", heightMap);
+    //waitKey(1000);
 
-    std::cout << "Image size: " << heightMap.cols << " x " << heightMap.rows << std::endl;
-    std::cout << "Sample height values:\n";
-    for (int y = 0; y < std::min(5, heightMap.rows); ++y) {
-        for (int x = 0; x < std::min(5, heightMap.cols); ++x) {
-            std::cout << (int)heightMap.at<uchar>(y, x) << " ";
-        }
-        std::cout << "\n";
-    }
+    //std::cout << "Image size: " << heightMap.cols << " x " << heightMap.rows << std::endl;
+   // std::cout << "Sample height values:\n";
+    // for (int y = 0; y < std::min(5, heightMap.rows); ++y) {
+    //     for (int x = 0; x < std::min(5, heightMap.cols); ++x) {
+    //         std::cout << (int)heightMap.at<uchar>(y, x) << " ";
+    //     }
+    //     std::cout << "\n";
+    // }
 
 
-    namedWindow("Heightmap", WINDOW_NORMAL);
-    imshow("Heightmap", heightMap);
-    waitKey(1000); // show image for 1 second
+    //namedWindow("Heightmap", WINDOW_NORMAL);
+   // imshow("Heightmap", heightMap);
+   // waitKey(1000); // show image for 1 second
 
     buildMesh();
 
