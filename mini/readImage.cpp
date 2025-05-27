@@ -3,15 +3,23 @@
 #include <vector>
 #include <iostream>
 #include <cmath>
+#include <vector>
+#include <fstream>
+#include <glm/glm.hpp>    
 
 using namespace std;
 using namespace cv;
+using namespace glm;
+
 // new variables for the option to change the camera position
 float camX = 400, camY = 300, camZ = 800;   // Eye position
 float yaw = 0.0f;   // Horizontal angle (in degrees)
 float pitch = -30.0f; // Vertical angle
 float moveSpeed = 10.0f;
 float turnSpeed = 5.0f;
+int mainWindow, globalWindow;
+int activeWindow = 0;
+
 
 struct MyVec3f {
         float x, y, z;
@@ -46,6 +54,8 @@ vector<MyVec3f> normals;
 vector<unsigned int> indices;
 Mat heightMap;
 std::vector<int> pickedIDs;; //NEW- picking list
+std::vector<glm::vec3> cameraTrack; //NEW - camera position track
+//glm::vec3 cameraPosition;
 
 // Create the mesh
 void buildMesh(float heightScale = 2.0f) {
@@ -87,24 +97,12 @@ void buildMesh(float heightScale = 2.0f) {
             indices.push_back(b);
 
         }
-        std::cout << "Building triangles from "<<y << " heightmap\n";
+        //std::cout << "Building triangles from "<<y << " heightmap\n";
 
     }
 
     // Compute normals
      normals.resize(vertices.size(), MyVec3f(0, 0, 0));
-    // for (size_t i = 0; i < indices.size(); i ++) {
-    //     MyVec3f &v0 = vertices[indices[i]];
-    //     MyVec3f &v1 = vertices[indices[i + 1]];
-    //     MyVec3f &v2 = vertices[indices[i + 2]];
-    //     MyVec3f normal = (v1 - v0).cross(v2 - v0);
-    //     normal.normalize();
-
-    //     normals[indices[i]] = normal;
-    //     normals[indices[i + 1]] = normal;
-    //     normals[indices[i + 2]] = normal;
-
-    // }
     //CHANGED
     for (size_t i = 0; i < indices.size(); i += 3) {
         MyVec3f &v0 = vertices[indices[i]];
@@ -126,6 +124,8 @@ void buildMesh(float heightScale = 2.0f) {
 
 // OpenGL rendering
 void display() {
+    glutSetWindow(mainWindow);
+    glViewport(0, 0, 640, 480);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glLoadIdentity();
 
@@ -135,65 +135,193 @@ void display() {
     float dirY = sin(radPitch);
     float dirZ = cos(radPitch) * sin(radYaw);
 
+    // Target the camera is looking at
     float targetX = camX + dirX;
     float targetY = camY + dirY;
     float targetZ = camZ + dirZ;
 
     gluLookAt(camX, camY, camZ, targetX, targetY, targetZ, 0, 1, 0);
-
+    
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
-    GLfloat lightPos[] = { 400, 400, 800, 1 };
+    GLfloat lightPos[] = { 400, 400, 800, 1 }; //CHANGED
+
     glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
 
+    
+
     glBegin(GL_TRIANGLES);
-    for (size_t i = 0; i < indices.size(); i += 3) {
-        for (int j = 0; j < 3; ++j) {
-            int vertexIdx = indices[i + j];
-            const MyVec3f &v = vertices[vertexIdx];
-            const MyVec3f &n = normals[vertexIdx];
+    for (size_t i = 0; i < indices.size(); i+=3) {// chat gpt changed it to be i+=3
+            for (int j = 0; j < 3; ++j) {
+                const MyVec3f &v = vertices[indices[i + j]];
+                const MyVec3f &n = normals[indices[i + j]];
 
-            if (std::find(pickedIDs.begin(), pickedIDs.end(), vertexIdx) != pickedIDs.end()) {
-                continue; // skip this, draw later as a square
-            }
+                // Normalize height to [0, 1] for color mapping
+                float t = v.y / 51.0f; // or adjust if scaled differently
 
-            float t = v.y / 51.0f;
-            float r, g, b;
-            if (t < 0.25f) {
-                r = 0.0f; g = 0.0f; b = 1.0f;
-            } else if (t < 0.5f) {
-                r = 0.0f; g = (t - 0.25f) * 4.0f; b = 1.0f - (t - 0.25f) * 4.0f;
-            } else if (t < 0.75f) {
-                r = (t - 0.5f) * 4.0f; g = 1.0f; b = 0.0f;
-            } else {
-                r = 1.0f; g = 1.0f - (t - 0.75f) * 4.0f; b = 0.0f;
-            }
+                float r, g, b;
+                if (t < 0.25f) {
+                    // Lowest: Blue
+                    r = 0.0f;
+                    g = 0.0f;
+                    b = 1.0f;
+                } else if (t < 0.5f) {
+                    // Blue to Green
+                    r = 0.0f;
+                    g = (t - 0.25f) * 4.0f;
+                    b = 1.0f - (t - 0.25f) * 4.0f;
+                } else if (t < 0.75f) {
+                    // Green to Yellow
+                    r = (t - 0.5f) * 4.0f;
+                    g = 1.0f;
+                    b = 0.0f;
+                } else {
+                    // Yellow to Red
+                    r = 1.0f;
+                    g = 1.0f - (t - 0.75f) * 4.0f;
+                    b = 0.0f;
+                }
 
-            glColor3f(r, g, b);
-            glNormal3f(n.x, n.y, n.z);
-            glVertex3f(v.x, v.y, v.z);
+                glColor3f(r, g, b);
+
+                glNormal3f(n.x, n.y, n.z);
+                glVertex3f(v.x, v.y, v.z);
+            
         }
+        
     }
+
+
+    
     glEnd();
 
-    // Draw picked vertices as white squares
-    float size = 2.0f;
     glDisable(GL_LIGHTING);
-    glBegin(GL_QUADS);
-    glColor3f(1.0f, 1.0f, 1.0f);
-    for (int idx : pickedIDs) {
-        const MyVec3f &v = vertices[idx];
-        glVertex3f(v.x - size, v.y, v.z - size);
-        glVertex3f(v.x + size, v.y, v.z - size);
-        glVertex3f(v.x + size, v.y, v.z + size);
-        glVertex3f(v.x - size, v.y, v.z + size);
+    glColor3f(1.0f, 1.0f, 1.0f); 
+    glPointSize(10.0f); // Bigger dots
+    glBegin(GL_POINTS);
+    for (int id : pickedIDs) {
+        int i = id * 3;
+        MyVec3f v0 = vertices[indices[i]];
+        MyVec3f v1 = vertices[indices[i + 1]];
+        MyVec3f v2 = vertices[indices[i + 2]];
+        MyVec3f center = MyVec3f(
+            (v0.x + v1.x + v2.x) / 3.0f,
+            (v0.y + v1.y + v2.y) / 3.0f,
+            (v0.z + v1.z + v2.z) / 3.0f
+        );
+        glVertex3f(center.x, center.y, center.z);
     }
     glEnd();
     glEnable(GL_LIGHTING);
 
+    glm::vec3 cameraPosition = glm::vec3(camX, camY, camZ);
+    if (cameraTrack.empty() || glm::distance(cameraPosition, cameraTrack.back()) > 0.1f) {
+        cameraTrack.push_back(cameraPosition);
+       // std::cout << camX << "," << camY << "," << camZ << "\n";
+    
+    }
+    
     glutSwapBuffers();
 }
 
+void displayGlobalView(){
+    glutSetWindow(globalWindow);
+    glViewport(0, 0, 640, 480);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluPerspective(45.0, 800.0 / 600.0, 1.0, 2000.0);
+
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    gluLookAt(850, 850, 2000, 600, 200, 1200, 0, 1, 0);
+
+    glEnable(GL_LIGHTING);
+    glEnable(GL_LIGHT0);
+    glEnable(GL_COLOR_MATERIAL);
+
+    GLfloat lightPos[] = { 400, 1000, 800, 1.0f };
+
+    glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
+    glBegin(GL_TRIANGLES);
+    for (size_t i = 0; i < indices.size(); i+=3) {// chat gpt changed it to be i+=3    
+            for (int j = 0; j < 3; ++j) {
+                const MyVec3f &v = vertices[indices[i + j]];
+                const MyVec3f &n = normals[indices[i + j]];
+
+                // Normalize height to [0, 1] for color mapping
+                float t = v.y / 51.0f; // or adjust if scaled differently
+
+                float r, g, b;
+                if (t < 0.25f) {
+                    // Lowest: Blue
+                    r = 0.0f;
+                    g = 0.0f;
+                    b = 1.0f;
+                } else if (t < 0.5f) {
+                    // Blue to Green
+                    r = 0.0f;
+                    g = (t - 0.25f) * 4.0f;
+                    b = 1.0f - (t - 0.25f) * 4.0f;
+                } else if (t < 0.75f) {
+                    // Green to Yellow
+                    r = (t - 0.5f) * 4.0f;
+                    g = 1.0f;
+                    b = 0.0f;
+                } else {
+                    // Yellow to Red
+                    r = 1.0f;
+                    g = 1.0f - (t - 0.75f) * 4.0f;
+                    b = 0.0f;
+                }
+
+                glColor3f(r, g, b);
+
+                glNormal3f(n.x, n.y, n.z);
+                glVertex3f(v.x, v.y, v.z);
+            }
+        
+        
+    }
+
+    glEnd();
+    
+    glDisable(GL_LIGHTING);
+    
+    glColor3f(1.0f, 1.0f, 1.0f);
+    glPointSize(10.0f); // Bigger dots
+    glBegin(GL_POINTS);
+    for (int id : pickedIDs) {
+        int i = id * 3;
+        MyVec3f v0 = vertices[indices[i]];
+        MyVec3f v1 = vertices[indices[i + 1]];
+        MyVec3f v2 = vertices[indices[i + 2]];
+        MyVec3f center = MyVec3f(
+            (v0.x + v1.x + v2.x) / 3.0f,
+            (v0.y + v1.y + v2.y) / 3.0f,
+            (v0.z + v1.z + v2.z) / 3.0f
+        );
+        glVertex3f(center.x, center.y, center.z);
+    }
+    glEnd();
+
+   // Draw camera path
+glDisable(GL_LIGHTING);   // Ensure lighting doesn't dim the line
+glDisable(GL_DEPTH_TEST); // Prevent line from being occluded
+glLineWidth(80.0f);         // Adjust width as desired
+glColor3f(1.0f, 1.0f, 1.0f); // Bright white
+
+glBegin(GL_LINE_STRIP);
+for (const auto& pos : cameraTrack) {
+    glVertex3f(pos.x, pos.y, pos.z);
+}
+glEnd();
+
+glEnable(GL_DEPTH_TEST);  // Restore default state
+glEnable(GL_LIGHTING);
+    glutSwapBuffers();
+}
 
 void reshape(int w, int h) {
     glViewport(0, 0, w, h);
@@ -240,36 +368,36 @@ void renderForPicking() {
 }
 
 
-
+// mouse click option for picking
 void mouseClick(int button, int state, int x, int y) {
-    if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
+    if (glutGetWindow() == mainWindow && button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
         GLint viewport[4];
         glGetIntegerv(GL_VIEWPORT, viewport);
 
-        renderForPicking();
+        glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
 
+        renderForPicking();  // Draw the scene using ID colors
+
+        // Read the pixel under the mouse
         GLubyte pixel[4];
-        glReadPixels(x, viewport[3] - y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+        glReadPixels(x, viewport[3] - y - 1, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
 
-        int triID = pixel[0] + pixel[1] * 256 + pixel[2] * 256 * 256;
+        int id = pixel[0] + pixel[1] * 256 + pixel[2] * 256 * 256;
 
-        if (triID >= 0 && triID * 3 + 2 < indices.size()) {
-            for (int j = 0; j < 3; ++j) {
-                int vIdx = indices[triID * 3 + j];
-                if (std::find(pickedIDs.begin(), pickedIDs.end(), vIdx) == pickedIDs.end()) {
-                    pickedIDs.push_back(vIdx);
-                }
-            }
+        // Add the picked id only if valid and not already picked
+        if (id >= 0 && std::find(pickedIDs.begin(), pickedIDs.end(), id) == pickedIDs.end()) {
+            pickedIDs.push_back(id);
+            glutPostWindowRedisplay(globalWindow);
+        
         }
-
-        glutPostRedisplay();
+        glutPostRedisplay(); // Ask OpenGL to redraw the scene
     }
 }
 
 //keyboard function to move around - copyed from chatgpt
 void keyboard(unsigned char key, int x, int y) {
     float radYaw = yaw * M_PI / 180.0f;
-    float radPitch = pitch * M_PI / 180.0f;
+    //float radPitch = pitch * M_PI / 180.0f;
 
     // Forward direction (ignores pitch for flat movement)
     float dirX = cos(radYaw);
@@ -327,6 +455,8 @@ void specialKeys(int key, int x, int y) {
 }//end of Chatgpt
 
 
+
+
 // Entry point
 int main(int argc, char** argv) {
     heightMap = imread(argv[1], IMREAD_GRAYSCALE);
@@ -342,29 +472,30 @@ int main(int argc, char** argv) {
        //cv::GaussianBlur(heightMap, heightMap, cv::Size(3, 3), 0);
    cv::GaussianBlur(heightMap, heightMap, cv::Size(3, 3), 0);
 
-    imshow("Processed Heightmap", heightMap);
-waitKey(1000);
+    // imshow("Processed Heightmap", heightMap);
+    // waitKey(1000);
 
-    std::cout << "Image size: " << heightMap.cols << " x " << heightMap.rows << std::endl;
-    std::cout << "Sample height values:\n";
-    for (int y = 0; y < std::min(5, heightMap.rows); ++y) {
-        for (int x = 0; x < std::min(5, heightMap.cols); ++x) {
-            std::cout << (int)heightMap.at<uchar>(y, x) << " ";
-        }
-        std::cout << "\n";
-    }
+   // std::cout << "Image size: " << heightMap.cols << " x " << heightMap.rows << std::endl;
+    // std::cout << "Sample height values:\n";
+    // for (int y = 0; y < std::min(5, heightMap.rows); ++y) {
+    //     for (int x = 0; x < std::min(5, heightMap.cols); ++x) {
+    //         std::cout << (int)heightMap.at<uchar>(y, x) << " ";
+    //     }
+    //     std::cout << "\n";
+    // }
 
 
-    namedWindow("Heightmap", WINDOW_NORMAL);
-    imshow("Heightmap", heightMap);
-    waitKey(1000); // show image for 1 second
+    // namedWindow("Heightmap", WINDOW_NORMAL);
+    // imshow("Heightmap", heightMap);
+    // waitKey(1000); // show image for 1 second
 
     buildMesh();
 
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
-    glutInitWindowSize(800, 600);
-    glutCreateWindow("3D Terrain Mesh");
+    glutInitWindowSize(640, 480);
+    glutInitWindowPosition(100, 100); // Adjust as needed
+    mainWindow = glutCreateWindow("3D Terrain Mesh");
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_NORMALIZE);
@@ -375,7 +506,22 @@ waitKey(1000);
     glutMouseFunc(mouseClick);
     glutKeyboardFunc(keyboard);
     glutSpecialFunc(specialKeys);
+
+    glutInitWindowPosition(760, 100); // Shifted right to be side by side (800 + margin)
+
+    globalWindow = glutCreateWindow("global View");
+    glutDisplayFunc(displayGlobalView);
+    glutIdleFunc([]() {
+        glutPostRedisplay();
+        glutPostWindowRedisplay(globalWindow);
+    });
     glutMainLoop();
+
+    // //printing the track positions
+    // for (const auto& pos : cameraTrack) {
+    //     std::cout << pos.x << "," << pos.y << "," << pos.z << "\n";
+    // }
+    
 
     return 0;
 }
