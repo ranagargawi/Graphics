@@ -22,6 +22,10 @@ struct MyVec3f {
         return MyVec3f(x - v.x, y - v.y, z - v.z);
     }
 
+    MyVec3f operator+(const MyVec3f &v) const { //CHANGED
+        return MyVec3f(x + v.x, y + v.y, z + v.z);
+    }
+
     MyVec3f cross(const MyVec3f &v) const {
         return MyVec3f(y * v.z - z * v.y,
                        z * v.x - x * v.z,
@@ -55,8 +59,11 @@ void buildMesh(float heightScale = 2.0f) {
     // Create vertices
     for (int y = 0; y < rows; ++y) {
         for (int x = 0; x < cols; ++x) {
-            float z = heightMap.at<uchar>(y, x) * heightScale;
-            vertices.emplace_back(x, y, z);
+            //float z = heightMap.at<uchar>(y, x) * heightScale;
+            float z = heightMap.at<uchar>(y, x) * 0.2f; //CHANGED
+
+            //vertices.emplace_back(x, y, z);
+            vertices.emplace_back(x, z, y); // CHANGED
         }
     }
 
@@ -85,23 +92,35 @@ void buildMesh(float heightScale = 2.0f) {
     }
 
     // Compute normals
-    normals.resize(vertices.size(), MyVec3f(0, 0, 0));
-    for (size_t i = 0; i < indices.size(); i ++) {
+     normals.resize(vertices.size(), MyVec3f(0, 0, 0));
+    // for (size_t i = 0; i < indices.size(); i ++) {
+    //     MyVec3f &v0 = vertices[indices[i]];
+    //     MyVec3f &v1 = vertices[indices[i + 1]];
+    //     MyVec3f &v2 = vertices[indices[i + 2]];
+    //     MyVec3f normal = (v1 - v0).cross(v2 - v0);
+    //     normal.normalize();
+
+    //     normals[indices[i]] = normal;
+    //     normals[indices[i + 1]] = normal;
+    //     normals[indices[i + 2]] = normal;
+
+    // }
+    //CHANGED
+    for (size_t i = 0; i < indices.size(); i += 3) {
         MyVec3f &v0 = vertices[indices[i]];
         MyVec3f &v1 = vertices[indices[i + 1]];
         MyVec3f &v2 = vertices[indices[i + 2]];
         MyVec3f normal = (v1 - v0).cross(v2 - v0);
         normal.normalize();
 
-        normals[indices[i]] = normal;
-        normals[indices[i + 1]] = normal;
-        normals[indices[i + 2]] = normal;
+        normals[indices[i]] = normals[indices[i]] + normal;
+        normals[indices[i + 1]] = normals[indices[i + 1]] + normal;
+        normals[indices[i + 2]] = normals[indices[i + 2]] + normal;
+    }
 
-        // chat offerd for imporvemant
-        // normals[indices[i]] = normals[indices[i]] + normal;
-        // normals[indices[i + 1]] = normals[indices[i + 1]] + normal;
-        // normals[indices[i + 2]] = normals[indices[i + 2]] + normal;
-
+    // Then normalize all
+    for (auto &n : normals) {
+        n.normalize();
     }
 }
 
@@ -129,7 +148,9 @@ void display() {
 
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
-    GLfloat lightPos[] = { 0, 0, 300, 1 };
+    //GLfloat lightPos[] = { 0, 0, 300, 1 };
+    GLfloat lightPos[] = { 400, 400, 800, 1 }; //CHANGED
+
     glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
 
     glBegin(GL_TRIANGLES);
@@ -294,6 +315,9 @@ int main(int argc, char** argv) {
         cerr << "Error loading heightmap\n";
         return -1;
     }
+
+    cv::flip(heightMap, heightMap, 0); //CHANGED - ADDED
+
     cv::equalizeHist(heightMap, heightMap);
 
        //cv::GaussianBlur(heightMap, heightMap, cv::Size(3, 3), 0);
