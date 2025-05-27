@@ -153,25 +153,58 @@ void display() {
 
     glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
 
+    
+
     glBegin(GL_TRIANGLES);
     for (size_t i = 0; i < indices.size(); i+=3) {// chat gpt changed it to be i+=3
         int triID = i / 3;
         if (std::find(pickedIDs.begin(), pickedIDs.end(), triID) != pickedIDs.end()) {
-            glColor3f(1.0f, 0.0f, 0.0f); // Red highlight
-        } else {
-            glColor3f(0.6f, 0.6f, 0.6f); // Default gray
+            glColor3f(1.0f, 1.0f, 1.0f);
+            for (int j = 0; j < 3; ++j) {
+                const MyVec3f &v = vertices[indices[i + j]];
+                const MyVec3f &n = normals[indices[i + j]]; 
+                glNormal3f(n.x, n.y, n.z);
+                glVertex3f(v.x, v.y, v.z);
+            }
         }
-        // const MyVec3f &n = normals[indices[i]];
-        // const MyVec3f &v = vertices[indices[i]];
-        // glNormal3f(n.x, n.y, n.z);
-        // glVertex3f(v.x, v.y, v.z);
-        for (int j = 0; j < 3; ++j) { //chat added the for loop
-            const MyVec3f &n = normals[indices[i + j]];
-            const MyVec3f &v = vertices[indices[i + j]];
-            glNormal3f(n.x, n.y, n.z);
-            glVertex3f(v.x, v.y, v.z);
-        }
+        else{
+            for (int j = 0; j < 3; ++j) {
+                const MyVec3f &v = vertices[indices[i + j]];
+                const MyVec3f &n = normals[indices[i + j]];
 
+                // Normalize height to [0, 1] for color mapping
+                float t = v.y / 51.0f; // or adjust if scaled differently
+
+                float r, g, b;
+                if (t < 0.25f) {
+                    // Lowest: Blue
+                    r = 0.0f;
+                    g = 0.0f;
+                    b = 1.0f;
+                } else if (t < 0.5f) {
+                    // Blue to Green
+                    r = 0.0f;
+                    g = (t - 0.25f) * 4.0f;
+                    b = 1.0f - (t - 0.25f) * 4.0f;
+                } else if (t < 0.75f) {
+                    // Green to Yellow
+                    r = (t - 0.5f) * 4.0f;
+                    g = 1.0f;
+                    b = 0.0f;
+                } else {
+                    // Yellow to Red
+                    r = 1.0f;
+                    g = 1.0f - (t - 0.75f) * 4.0f;
+                    b = 0.0f;
+                }
+
+                glColor3f(r, g, b);
+
+                glNormal3f(n.x, n.y, n.z);
+                glVertex3f(v.x, v.y, v.z);
+            }
+        }
+        
     }
     
     glEnd();
