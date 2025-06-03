@@ -19,6 +19,8 @@ float moveSpeed = 10.0f;
 float turnSpeed = 5.0f;
 int mainWindow, globalWindow;
 int activeWindow = 0;
+int currScreenshot = 0;
+bool showingScreenshots = false;
 
 
 struct MyVec3f {
@@ -55,6 +57,8 @@ vector<unsigned int> indices;
 Mat heightMap;
 std::vector<int> pickedIDs;; //NEW- picking list
 std::vector<glm::vec3> cameraTrack; //NEW - camera position track
+std::vector<cv::Mat> screenshots; //NEW - saved screenshots
+std::vector<std::tuple<float, float, float, float>> screenshotPositions; //NEW - screenshots positions
 //glm::vec3 cameraPosition;
 
 // Create the mesh
@@ -125,7 +129,7 @@ void buildMesh(float heightScale = 2.0f) {
 // OpenGL rendering
 void display() {
     glutSetWindow(mainWindow);
-    glViewport(0, 0, 640, 480);
+    glViewport(0, 0, 1000, 800);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glLoadIdentity();
 
@@ -194,10 +198,10 @@ void display() {
 
     
     glEnd();
-
+    //drawing the picking dots in black
     glDisable(GL_LIGHTING);
-    glColor3f(1.0f, 1.0f, 1.0f); 
-    glPointSize(10.0f); // Bigger dots
+    glColor3f(0.0f, 0.0f, 0.0f); 
+    glPointSize(20.0f); // Bigger dots
     glBegin(GL_POINTS);
     for (int id : pickedIDs) {
         int i = id * 3;
@@ -217,7 +221,7 @@ void display() {
     glm::vec3 cameraPosition = glm::vec3(camX, camY, camZ);
     if (cameraTrack.empty() || glm::distance(cameraPosition, cameraTrack.back()) > 0.1f) {
         cameraTrack.push_back(cameraPosition);
-       // std::cout << camX << "," << camY << "," << camZ << "\n";
+        std::cout << camX << "," << camY << "," << camZ << "\n";
     
     }
     
@@ -226,7 +230,7 @@ void display() {
 
 void displayGlobalView(){
     glutSetWindow(globalWindow);
-    glViewport(0, 0, 640, 480);
+    glViewport(0, 0, 1000, 800);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     glMatrixMode(GL_PROJECTION);
@@ -245,7 +249,7 @@ void displayGlobalView(){
 
     glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
     glBegin(GL_TRIANGLES);
-    for (size_t i = 0; i < indices.size(); i+=3) {// chat gpt changed it to be i+=3    
+    for (size_t i = 0; i < indices.size(); i+=3) {  
             for (int j = 0; j < 3; ++j) {
                 const MyVec3f &v = vertices[indices[i + j]];
                 const MyVec3f &n = normals[indices[i + j]];
@@ -287,9 +291,9 @@ void displayGlobalView(){
 
     glEnd();
     
+    //drawing the picking points in black
     glDisable(GL_LIGHTING);
-    
-    glColor3f(1.0f, 1.0f, 1.0f);
+    glColor3f(0.0f, 0.0f, 0.0f);
     glPointSize(10.0f); // Bigger dots
     glBegin(GL_POINTS);
     for (int id : pickedIDs) {
@@ -306,20 +310,47 @@ void displayGlobalView(){
     }
     glEnd();
 
-   // Draw camera path
-glDisable(GL_LIGHTING);   // Ensure lighting doesn't dim the line
-glDisable(GL_DEPTH_TEST); // Prevent line from being occluded
-glLineWidth(80.0f);         // Adjust width as desired
-glColor3f(1.0f, 1.0f, 1.0f); // Bright white
+    //drawing track line in white
+    glDisable(GL_LIGHTING);
+    glDisable(GL_DEPTH_TEST);
+    glColor3f(1.0f, 1.0f, 1.0f); 
+    glLineWidth(30.0f);
+    glBegin(GL_LINE_STRIP);
+    for (const auto& pos : cameraTrack) {
+        glVertex3f(pos.x, pos.y, pos.z);
+    }
+    glEnable(GL_DEPTH_TEST);
+    glEnd();
+    glEnable(GL_LIGHTING);
 
-glBegin(GL_LINE_STRIP);
-for (const auto& pos : cameraTrack) {
-    glVertex3f(pos.x, pos.y, pos.z);
-}
-glEnd();
+    //drawing the screenshots position triangle in white
+    glDisable(GL_LIGHTING);
+    glDisable(GL_DEPTH_TEST);
+    glColor3f(1.0f, 1.0f, 1.0f);
+    float size = 20.0f;             // Triangle size
+    for (const auto& pos : screenshotPositions) {
+        float x = std::get<0>(pos);
+        float y = std::get<1>(pos);
+        float z = std::get<2>(pos);
+        float cameraYaw = std::get<3>(pos);
 
-glEnable(GL_DEPTH_TEST);  // Restore default state
-glEnable(GL_LIGHTING);
+        glPushMatrix();
+        glTranslatef(x, y + 0.1f, z);  // slightly above ground
+
+        // Rotate so triangle faces camera
+        glRotatef(-cameraYaw, 0.0f, 1.0f, 0.0f);
+
+        glBegin(GL_TRIANGLES);
+        // Triangle pointing "forward" (positive Z after rotation)
+        glVertex3f(0.0f, 0.0f, size);
+        glVertex3f(-size, 0.0f, -size);
+        glVertex3f(size, 0.0f, -size);
+        glEnd();
+
+        glPopMatrix();
+    }
+    glEnable(GL_LIGHTING);
+    glEnable(GL_DEPTH_TEST);
     glutSwapBuffers();
 }
 
@@ -330,6 +361,7 @@ void reshape(int w, int h) {
     gluPerspective(45, (float)w / h, 1, 1000);
     glMatrixMode(GL_MODELVIEW);
 }
+
 
 //NEW - picking option
 void renderForPicking() {
@@ -397,17 +429,14 @@ void mouseClick(int button, int state, int x, int y) {
 //keyboard function to move around - copyed from chatgpt
 void keyboard(unsigned char key, int x, int y) {
     float radYaw = yaw * M_PI / 180.0f;
-    //float radPitch = pitch * M_PI / 180.0f;
-
-    // Forward direction (ignores pitch for flat movement)
     float dirX = cos(radYaw);
     float dirZ = sin(radYaw);
     float rightX = -dirZ;
     float rightZ = dirX;
-
-    switch (key) {
-    case 27: // ESC
+    if(!showingScreenshots && key == 27){
         exit(0);
+    }
+    switch (key) {
     case 'w':
         camX += dirX * moveSpeed;
         camZ += dirZ * moveSpeed;
@@ -416,43 +445,92 @@ void keyboard(unsigned char key, int x, int y) {
         camX -= dirX * moveSpeed;
         camZ -= dirZ * moveSpeed;
         break;
-    case 'a':
+    case 'd':
         camX += rightX * moveSpeed;
         camZ += rightZ * moveSpeed;
         break;
-    case 'd':
+    case 'a':
         camX -= rightX * moveSpeed;
         camZ -= rightZ * moveSpeed;
         break;
-    case 'q': // Up
+    case 'q':
         camY += moveSpeed;
         break;
-    case 'e': // Down
+    case 'e':
         camY -= moveSpeed;
         break;
+    case 'B':
+    case 'b': {
+        GLint viewport[4];
+        glGetIntegerv(GL_VIEWPORT, viewport);
+        int width = viewport[2], height = viewport[3];
+
+        std::vector<GLubyte> pixels(width * height * 3);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+
+        cv::Mat img(height, width, CV_8UC3, pixels.data());
+        cv::Mat flipped;
+        cv::flip(img, flipped, 0);  
+        cv::Mat bgr;
+        cv::cvtColor(flipped, bgr, cv::COLOR_RGB2BGR);
+        screenshots.push_back(bgr.clone());  
+        screenshotPositions.emplace_back(camX, camY, camZ, yaw);
+        std::cout << "Screenshot taken at:" << camX << "," << camY << "," << camZ << " Total saved: " << screenshots.size() << "\n";
+        break;
     }
-    glutPostRedisplay();
+    case 'R': {
+        if (!screenshots.empty()) {
+            showingScreenshots = true;
+            currScreenshot = 0;
+            while (showingScreenshots) {
+                cv::imshow("Screenshot", screenshots[currScreenshot]);
+                int key = cv::waitKey(0);
+                switch (key) {
+                    case 27: // ESC
+                        showingScreenshots = false;
+                        cv::destroyWindow("Screenshot");
+                        break;
+                    case 81: // Left
+                        if (currScreenshot > 0) currScreenshot--;
+                        break;
+                    case 83: // Right
+                        if (currScreenshot < (int)screenshots.size() - 1) currScreenshot++;
+                        break;
+                }
+            }
+        }
+        break;
+    }
+    }
+
+    glutPostRedisplay();  // Moved here
 }
+//end of Chatgpt
 
 void specialKeys(int key, int x, int y) {
-    switch (key) {
-    case GLUT_KEY_LEFT:
-        yaw -= turnSpeed;
-        break;
-    case GLUT_KEY_RIGHT:
-        yaw += turnSpeed;
-        break;
-    case GLUT_KEY_UP:
-        pitch += turnSpeed;
-        if (pitch > 89.0f) pitch = 89.0f;
-        break;
-    case GLUT_KEY_DOWN:
-        pitch -= turnSpeed;
-        if (pitch < -89.0f) pitch = -89.0f;
-        break;
-    }
+    
+        switch (key) {
+        case GLUT_KEY_LEFT:
+            yaw -= turnSpeed;
+            break;
+        case GLUT_KEY_RIGHT:
+            yaw += turnSpeed;
+            break;
+        case GLUT_KEY_UP:
+            pitch += turnSpeed;
+            if (pitch > 89.0f) pitch = 89.0f;
+            break;
+        case GLUT_KEY_DOWN:
+            pitch -= turnSpeed;
+            if (pitch < -89.0f) pitch = -89.0f;
+            break;
+        }
+    
     glutPostRedisplay();
 }//end of Chatgpt
+
+
 
 
 
@@ -472,10 +550,10 @@ int main(int argc, char** argv) {
        //cv::GaussianBlur(heightMap, heightMap, cv::Size(3, 3), 0);
    cv::GaussianBlur(heightMap, heightMap, cv::Size(3, 3), 0);
 
-    // imshow("Processed Heightmap", heightMap);
-    // waitKey(1000);
+    imshow("Processed Heightmap", heightMap);
+    waitKey(1000);
 
-   // std::cout << "Image size: " << heightMap.cols << " x " << heightMap.rows << std::endl;
+    std::cout << "Image size: " << heightMap.cols << " x " << heightMap.rows << std::endl;
     // std::cout << "Sample height values:\n";
     // for (int y = 0; y < std::min(5, heightMap.rows); ++y) {
     //     for (int x = 0; x < std::min(5, heightMap.cols); ++x) {
@@ -485,15 +563,15 @@ int main(int argc, char** argv) {
     // }
 
 
-    // namedWindow("Heightmap", WINDOW_NORMAL);
-    // imshow("Heightmap", heightMap);
-    // waitKey(1000); // show image for 1 second
+    namedWindow("Heightmap", WINDOW_NORMAL);
+    imshow("Heightmap", heightMap);
+    waitKey(1000); // show image for 1 second
 
     buildMesh();
 
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
-    glutInitWindowSize(640, 480);
+    glutInitWindowSize(1000, 800);
     glutInitWindowPosition(100, 100); // Adjust as needed
     mainWindow = glutCreateWindow("3D Terrain Mesh");
 
@@ -507,9 +585,9 @@ int main(int argc, char** argv) {
     glutKeyboardFunc(keyboard);
     glutSpecialFunc(specialKeys);
 
-    glutInitWindowPosition(760, 100); // Shifted right to be side by side (800 + margin)
+    glutInitWindowPosition(1100, 100); // Shifted right to be side by side (800 + margin)
 
-    globalWindow = glutCreateWindow("global View");
+    globalWindow = glutCreateWindow("glob+/=al View");
     glutDisplayFunc(displayGlobalView);
     glutIdleFunc([]() {
         glutPostRedisplay();
