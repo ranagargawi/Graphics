@@ -21,18 +21,26 @@ int mainWindow, globalWindow;
 int activeWindow = 0;
 int currScreenshot = 0;
 bool showingScreenshots = false;
-vector<MyVec3f> vertices;
-vector<MyVec3f> normals;
+
 vector<unsigned int> indices;
 Mat heightMap;
 std::vector<int> pickedIDs;; //NEW- picking list
 std::vector<int> pickedGlobalIDs;; //NEW- picking list
 std::vector<cv::Point2f> pickedPoints2D; // store 2D pixel coordinates
-std::vector<glm::vec3> pickedPoints3D;  // Stores 3D coordinates of picked points
+std::vector<cv::Point3f> pickedPoints3D;  // Stores 3D coordinates of picked points
 std::vector<glm::vec3> cameraTrack; //NEW - camera position track
 std::vector<cv::Mat> screenshots; //NEW - saved screenshots
 std::vector<std::tuple<float, float, float, float>> screenshotPositions; //NEW - screenshots positions
-//glm::vec3 cameraPosition;
+// the location of the screenshot that was computed by ePnP
+std::vector<std::tuple<float, float, float, float>> ePnPPositions;
+cv::Mat R;       
+cv::Mat tvec;   
+cv::Mat rvec;   
+cv::Point3d camPos;  
+cv::Point3d forward;  
+cv::Point3d right;    
+cv::Point3d up;      
+
 
 
 struct MyVec3f {
@@ -62,6 +70,8 @@ struct MyVec3f {
     }
 };
 
+vector<MyVec3f> vertices;
+vector<MyVec3f> normals;
 
 
 
@@ -356,7 +366,7 @@ void displayGlobalView(){
     glDisable(GL_LIGHTING);
     glDisable(GL_DEPTH_TEST);
     glColor3f(1.0f, 1.0f, 1.0f); 
-    glLineWidth(10.0f);
+    glLineWidth(5.0f);
     glBegin(GL_LINE_STRIP);
     for (const auto& pos : cameraTrack) {
         glVertex3f(pos.x, pos.y, pos.z);
@@ -375,12 +385,43 @@ void displayGlobalView(){
         float y = std::get<1>(pos);
         float z = std::get<2>(pos);
         float cameraYaw = std::get<3>(pos);
-
+        
         glPushMatrix();
         glTranslatef(x, y + 0.1f, z);  // slightly above ground
 
         // Rotate so triangle faces camera
-        glRotatef(-cameraYaw, 0.0f, 1.0f, 0.0f);
+        glRotatef(-cameraYaw , 0.0f, 1.0f, 0.0f);
+
+        glBegin(GL_TRIANGLES);
+        // Triangle pointing "forward" (positive Z after rotation)
+        glVertex3f(0.0f, 0.0f, size);
+        glVertex3f(-size, 0.0f, -size);
+        glVertex3f(size, 0.0f, -size);
+        glEnd();
+
+        glPopMatrix();
+    }
+    glEnable(GL_LIGHTING);
+    glEnable(GL_DEPTH_TEST);
+
+    //drawing the ePnP positions in red
+    glDisable(GL_LIGHTING);
+    glDisable(GL_DEPTH_TEST);
+    glColor3f(1.0f, 0.0f, 0.0f);
+    size = 20.0f;             // Triangle size
+    for (const auto& pos : ePnPPositions) {
+        float x = std::get<0>(pos) ;
+        float y = std::get<1>(pos) ;
+        float z = std::get<2>(pos);
+        float cameraYaw = std::get<3>(pos);
+
+        glPushMatrix();
+        glTranslatef(x, y + 0.1f, z);  // slightly above ground
+
+        // Convert yaw from radians to degrees for OpenGL
+        float cameraYawDeg = cameraYaw * 180.0f / M_PI;
+        // Rotate so triangle faces camera
+        glRotatef(-cameraYawDeg , 0.0f, 1.0f, 0.0f);
 
         glBegin(GL_TRIANGLES);
         // Triangle pointing "forward" (positive Z after rotation)
@@ -394,6 +435,7 @@ void displayGlobalView(){
     glEnable(GL_LIGHTING);
     glEnable(GL_DEPTH_TEST);
     glutSwapBuffers();
+    
 }
 
 void reshape(int w, int h) {
@@ -505,7 +547,6 @@ void mouseClick(int button, int state, int x, int y) {
                 (v0.z + v1.z + v2.z) / 3.0f
             );
             pickedPoints2D.push_back(cv::Point2f(x, y));
-            pickedPoints3D.push_back(center3D); 
             
         
         }
@@ -541,7 +582,7 @@ void mouseClick(int button, int state, int x, int y) {
                 (v0.y + v1.y + v2.y) / 3.0f,
                 (v0.z + v1.z + v2.z) / 3.0f
             );
-            pickedPoints3D.push_back(center3D); 
+            pickedPoints3D.push_back(cv::Point3f(center3D.x, center3D.y, center3D.z)); 
 
             glutPostWindowRedisplay(globalWindow);
         
@@ -557,6 +598,9 @@ void keyboard(unsigned char key, int x, int y) {
     float dirZ = sin(radYaw);
     float rightX = -dirZ;
     float rightZ = dirX;
+    if(glutGetWindow() != mainWindow)
+        glutSetWindow(mainWindow);
+
     if(!showingScreenshots && key == 27){
         exit(0);
     }
@@ -604,7 +648,7 @@ void keyboard(unsigned char key, int x, int y) {
         std::cout << "Screenshot taken at:" << camX << "," << camY << "," << camZ << " Total saved: " << screenshots.size() << "\n";
         break;
     }
-    // moving through the screenshots
+    // showing the screenshots
     case 'R': {
         if (!screenshots.empty()) {
             showingScreenshots = true;
@@ -631,6 +675,10 @@ void keyboard(unsigned char key, int x, int y) {
     // computing ePnP
     case 'C':
     case 'c': {
+        if(pickedPoints2D.size() < 4 || pickedPoints3D.size() < 4){
+            cout << "not enough points picked" << "\n";
+            break;
+        }
         cv::Mat rvec, tvec;
         int width = 1000, height = 800;
         double fovy = 45.0 * CV_PI / 180.0; // radians
@@ -649,9 +697,20 @@ void keyboard(unsigned char key, int x, int y) {
         cv::Rodrigues(rvec, R);  // convert rvec to 3x3 rotation matrix
         cv::Mat Rt = R.t();      // transpose
         cv::Mat camPos = -Rt * tvec; // camera position in world coords
-        cv::Mat zAxis = Rt * (cv::Mat_<double>(3,1) << 0, 0, 1); // camera's forward in world
-        cv::Mat upAxis = Rt * (cv::Mat_<double>(3,1) << 0, 1, 0); // camera's up in world
+        // cv::Mat zAxis = Rt * (cv::Mat_<double>(3,1) << 0, 0, 1); // camera's forward in world
+        // cv::Mat upAxis = Rt * (cv::Mat_<double>(3,1) << 0, 1, 0); // camera's up in world
+        double yaw = atan2(R.at<double>(1,0), R.at<double>(0,0));
+        ePnPPositions.emplace_back(camPos.at<double>(0), camPos.at<double>(1), camPos.at<double>(2), yaw);
+        std::cout << "ePnP camPos: " 
+          << camPos.at<double>(0) << ", "
+          << camPos.at<double>(1) << ", "
+          << camPos.at<double>(2) << "\n";
 
+        //delete the picked points after the computation 
+        pickedPoints2D.clear();
+        pickedPoints3D.clear();
+        pickedIDs.clear();
+        pickedGlobalIDs.clear();
 
     }
     }
