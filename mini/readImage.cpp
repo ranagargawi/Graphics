@@ -17,7 +17,7 @@ float yaw = 0.0f;   // Horizontal angle (in degrees)
 float pitch = -30.0f; // Vertical angle
 float moveSpeed = 10.0f;
 float turnSpeed = 5.0f;
-int mainWindow, globalWindow;
+int mainWindow, globalWindow, epnpWindow;
 int activeWindow = 0;
 int currScreenshot = 0;
 bool showingScreenshots = false;
@@ -33,13 +33,9 @@ std::vector<cv::Mat> screenshots; //NEW - saved screenshots
 std::vector<std::tuple<float, float, float, float>> screenshotPositions; //NEW - screenshots positions
 // the location of the screenshot that was computed by ePnP
 std::vector<std::tuple<float, float, float, float>> ePnPPositions;
-cv::Mat R;       
-cv::Mat tvec;   
-cv::Mat rvec;   
-cv::Point3d camPos;  
-cv::Point3d forward;  
-cv::Point3d right;    
-cv::Point3d up;      
+cv::Mat camPos;
+glm::vec3 forwardVec;
+glm::vec3 upVec;     
 
 
 
@@ -437,6 +433,74 @@ void displayGlobalView(){
     glutSwapBuffers();
     
 }
+ 
+// todo: need to be fixed!! 
+void displayEPNP(){
+    
+    glutSetWindow(epnpWindow);
+    glViewport(0, 0, 1000, 800);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glLoadIdentity();
+
+    gluLookAt(camPos.at<double>(0), camPos.at<double>(1), camPos.at<double>(2),
+          camPos.at<double>(0)+forwardVec[0],
+          camPos.at<double>(1)+forwardVec[1],
+          camPos.at<double>(2)+forwardVec[2],
+          upVec[0], upVec[1], upVec[2]);
+
+    
+    glEnable(GL_LIGHTING);
+    glEnable(GL_LIGHT0);
+    GLfloat lightPos[] = { 400, 400, 800, 1 }; //CHANGED
+
+    glLightfv(GL_LIGHT0, GL_POSITION, lightPos);
+
+    
+
+    glBegin(GL_TRIANGLES);
+    for (size_t i = 0; i < indices.size(); i+=3) {// chat gpt changed it to be i+=3
+            for (int j = 0; j < 3; ++j) {
+                const MyVec3f &v = vertices[indices[i + j]];
+                const MyVec3f &n = normals[indices[i + j]];
+
+                // Normalize height to [0, 1] for color mapping
+                float t = v.y / 51.0f; // or adjust if scaled differently
+
+                float r, g, b;
+                if (t < 0.25f) {
+                    // Lowest: Blue
+                    r = 0.0f;
+                    g = 0.0f;
+                    b = 1.0f;
+                } else if (t < 0.5f) {
+                    // Blue to Green
+                    r = 0.0f;
+                    g = (t - 0.25f) * 4.0f;
+                    b = 1.0f - (t - 0.25f) * 4.0f;
+                } else if (t < 0.75f) {
+                    // Green to Yellow
+                    r = (t - 0.5f) * 4.0f;
+                    g = 1.0f;
+                    b = 0.0f;
+                } else {
+                    // Yellow to Red
+                    r = 1.0f;
+                    g = 1.0f - (t - 0.75f) * 4.0f;
+                    b = 0.0f;
+                }
+
+                glColor3f(r, g, b);
+
+                glNormal3f(n.x, n.y, n.z);
+                glVertex3f(v.x, v.y, v.z);
+            
+        }
+        
+    }
+    
+    glEnd();
+    glutSwapBuffers();
+}
 
 void reshape(int w, int h) {
     glViewport(0, 0, w, h);
@@ -696,9 +760,10 @@ void keyboard(unsigned char key, int x, int y) {
         cv::Mat R;
         cv::Rodrigues(rvec, R);  // convert rvec to 3x3 rotation matrix
         cv::Mat Rt = R.t();      // transpose
-        cv::Mat camPos = -Rt * tvec; // camera position in world coords
-        // cv::Mat zAxis = Rt * (cv::Mat_<double>(3,1) << 0, 0, 1); // camera's forward in world
-        // cv::Mat upAxis = Rt * (cv::Mat_<double>(3,1) << 0, 1, 0); // camera's up in world
+        camPos = -Rt * tvec; // camera position in world coords
+        glm::vec3 forwardVec(R.at<double>(2,0), R.at<double>(2,1), R.at<double>(2,2));
+        glm::vec3 upVec(R.at<double>(1,0), R.at<double>(1,1), R.at<double>(1,2));
+
         double yaw = atan2(R.at<double>(1,0), R.at<double>(0,0));
         ePnPPositions.emplace_back(camPos.at<double>(0), camPos.at<double>(1), camPos.at<double>(2), yaw);
         std::cout << "ePnP camPos: " 
@@ -706,12 +771,16 @@ void keyboard(unsigned char key, int x, int y) {
           << camPos.at<double>(1) << ", "
           << camPos.at<double>(2) << "\n";
 
+        glutInitWindowPosition(1200, 50);
+        epnpWindow = glutCreateWindow("EPnP View");
+        glutDisplayFunc(displayEPNP);
         //delete the picked points after the computation 
         pickedPoints2D.clear();
         pickedPoints3D.clear();
         pickedIDs.clear();
         pickedGlobalIDs.clear();
 
+        //check if we need to display a new window of the world from the computed ePnP angles 
     }
     }
 
