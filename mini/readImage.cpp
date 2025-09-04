@@ -25,7 +25,7 @@ int mainWindow, globalWindow, epnpWindow;
 int activeWindow = 0;
 int currScreenshot = 0;
 bool showingScreenshots = false;
-bool preStage = true; //starting in the pre stage, moving to the run stage after taking the first 10 pictures
+bool preStage = false; //starting in the pre stage, moving to the run stage after taking the first 10 pictures
 
 vector<unsigned int> indices;
 Mat heightMap;
@@ -873,6 +873,21 @@ void keyboard(unsigned char key, int x, int y) {
                 }
             }
 
+            cv::Mat outImg;
+            cv::drawKeypoints(img, selectedNew, outImg, cv::Scalar(0,255,0));
+            cv::Mat flipped2;
+            cv::flip(outImg, flipped2, 0); 
+            cv::Mat fixedImg;
+            cv::cvtColor(flipped2, fixedImg, cv::COLOR_RGB2BGR);
+            cv::imshow("Features", fixedImg);
+            int key = cv::waitKey(0);
+            showingScreenshots = false;
+            cv::destroyWindow("Features");
+            if (key ==27){ // ESC
+                    showingScreenshots = false;
+                    cv::destroyWindow("Features");
+            }
+
             //compute epnp
 
             if (matched2dlocations.size() < 4) {
@@ -880,7 +895,7 @@ void keyboard(unsigned char key, int x, int y) {
                 break;
             }
 
-            cv::Mat rvec, tvec;
+            cv::Mat rvec, tvec, inliers;
             int width = 1000, height = 800;
             double fovy = 45.0 * CV_PI / 180.0; // radians
             double fy = height / (2.0 * tan(fovy / 2.0));
@@ -892,7 +907,22 @@ void keyboard(unsigned char key, int x, int y) {
                                                             0, fy, cy,
                                                             0, 0, 1);
 
-            cv::solvePnP(matched3dlocations, matched2dlocations, cameraMatrix, cv::Mat::zeros(4, 1, CV_64F), rvec, tvec, false, cv::SOLVEPNP_EPNP);
+            //cv::solvePnP(matched3dlocations, matched2dlocations, cameraMatrix, cv::Mat::zeros(4, 1, CV_64F), rvec, tvec, false, cv::SOLVEPNP_EPNP);
+            cv::solvePnPRansac(
+                matched3dlocations,
+                matched2dlocations,
+                cameraMatrix,
+                cv::Mat::zeros(4, 1, CV_64F),
+                rvec,
+                tvec,
+                false,
+                100,     // iterations
+                8.0,     // reprojection error in pixels
+                0.99,    // confidence
+                inliers  // <-- output inlier indices
+            );
+            std::cout << "PnP inliers: " << inliers.rows << "/" << matched3dlocations.size() << std::endl;
+
 
             cv::Mat R;
             cv::Rodrigues(rvec, R);  // convert rvec to 3x3 rotation matrix
