@@ -25,7 +25,7 @@ int mainWindow, globalWindow, epnpWindow;
 int activeWindow = 0;
 int currScreenshot = 0;
 bool showingScreenshots = false;
-bool preStage = false; //starting in the pre stage, moving to the run stage after taking the first 10 pictures
+bool preStage = true; //starting in the pre stage, moving to the run stage after taking the first 10 pictures
 
 vector<unsigned int> indices;
 Mat heightMap;
@@ -45,7 +45,7 @@ std::vector<vector<cv::KeyPoint>> imgsFeatures; // holds the features for each i
 std::vector<cv::Mat> imgsDescriptors; // holds the descriptor for each image in the pre-stage
 vector<cv::Point2f> matched2dlocations; // holds the 2d locations of the matched features in the run-stage
 vector<cv::Point3f> matched3dlocations; // holds the 3d locations of the matched features in the run-stage
-std::vector<vector<cv::Point3f>> realPickedPoints3D; //for debugging
+//std::vector<vector<cv::Point3f>> realPickedPoints3D; //for debugging
 int pp = 20;
 
 struct MyVec3f {
@@ -218,7 +218,7 @@ void display() {
     
     
     if(preStage){
-        // if we're on the pre stage, draw dots in the features location, one at a time - for the picking option
+        //if we're on the pre stage, draw dots in the features location, one at a time - for the picking option
         if(imgsFeatures.size() != 0){
             GLint viewport[4];
             glGetIntegerv(GL_VIEWPORT, viewport);
@@ -259,7 +259,17 @@ void display() {
                 if(idx == 6) glColor3f(0.0f, 1.0f, 1.0f); //light blue
                 if(idx == 7) glColor3f(1.0f, 1.0f, 1.0f); //white
                 if(idx == 8) glColor3f(1.0f, 0.0f, 1.0f); //Magenta
-                if(idx >= 9) glColor3f(0.0f, 0.5f, 0.5f); //olive green
+                if (idx == 9)  glColor3f(0.6f, 0.4f, 0.2f);  // brown
+                if (idx == 10) glColor3f(0.7f, 0.7f, 0.7f);  // light gray
+                if (idx == 11) glColor3f(0.3f, 0.3f, 0.3f);  // dark gray
+                if (idx == 12) glColor3f(0.7f, 0.5f, 0.7f);  // lavender
+                if (idx == 13) glColor3f(0.8f, 0.5f, 0.2f);  // bronze
+                if (idx == 14) glColor3f(0.5f, 0.5f, 0.0f);  // dark olive
+                if (idx == 15) glColor3f(0.9f, 0.9f, 0.5f);  // light yellow
+                if (idx == 16) glColor3f(0.5f, 0.0f, 0.5f);  // indigo
+                if (idx == 17) glColor3f(0.0f, 0.5f, 0.8f);  // turquoise
+                if (idx == 18) glColor3f(0.9f, 0.6f, 0.7f);  // salmon
+                if (idx >= 19) glColor3f(0.6f, 0.8f, 0.2f);  // lime green / chartreuse
                 glVertex2f(keypoint.pt.x, keypoint.pt.y);
 
                 
@@ -308,12 +318,12 @@ void savePickedDataForAllImages() {
         for (size_t i = 0; i < pp; i++) {
             const KeyPoint& kp = imgsFeatures[imgIdx][i];
             cv::Point3f point = pickedPoints3D[imgIdx][i];
-            cv::Point3f realPoint = realPickedPoints3D[imgIdx][i];
+            //cv::Point3f realPoint = realPickedPoints3D[imgIdx][i];
             fs << "{" << "x" << kp.pt.x << "y" << kp.pt.y
             << "size" << kp.size << "angle" << kp.angle
             << "response" << kp.response << "octave" << kp.octave
-            << "class_id" << kp.class_id << "pt3d_x" << realPoint.x 
-            << "pt3d_y" << realPoint.y << "pt3d_z" << realPoint.z << "}";
+            << "class_id" << kp.class_id << "pt3d_x" << point.x 
+            << "pt3d_y" << point.y << "pt3d_z" << point.z << "}";
         } 
         fs << "]";
 
@@ -409,7 +419,18 @@ void displayGlobalView(){
             if(idx == 6) glColor3f(0.0f, 1.0f, 1.0f); //light blue
             if(idx == 7) glColor3f(1.0f, 1.0f, 1.0f); //white
             if(idx == 8) glColor3f(1.0f, 0.0f, 1.0f); //Magenta
-            if(idx >= 9) glColor3f(0.0f, 0.5f, 0.5f); //olive green
+            if (idx == 9)  glColor3f(0.6f, 0.4f, 0.2f);  // brown
+            if (idx == 10) glColor3f(0.7f, 0.7f, 0.7f);  // light gray
+            if (idx == 11) glColor3f(0.3f, 0.3f, 0.3f);  // dark gray
+            if (idx == 12) glColor3f(0.7f, 0.5f, 0.7f);  // lavender
+            if (idx == 13) glColor3f(0.8f, 0.5f, 0.2f);  // bronze
+            if (idx == 14) glColor3f(0.5f, 0.5f, 0.0f);  // dark olive
+            if (idx == 15) glColor3f(0.9f, 0.9f, 0.5f);  // light yellow
+            if (idx == 16) glColor3f(0.5f, 0.0f, 0.5f);  // indigo
+            if (idx == 17) glColor3f(0.0f, 0.5f, 0.8f);  // turquoise
+            if (idx == 18) glColor3f(0.9f, 0.6f, 0.7f);  // salmon
+            if (idx >= 19) glColor3f(0.6f, 0.8f, 0.2f);  // lime green / chartreuse
+
             MyVec3f v0 = vertices[indices[i]];
             MyVec3f v1 = vertices[indices[i + 1]];
             MyVec3f v2 = vertices[indices[i + 2]];
@@ -783,30 +804,30 @@ void keyboard(unsigned char key, int x, int y) {
             imgsFeatures.push_back(selected);
             imgsDescriptors.push_back(selectedDesc);
 
-            //saving the true 3d location for debugging
-            std::vector<cv::Point3f> feature3DPoints;
+            // //saving the true 3d location for debugging
+            // std::vector<cv::Point3f> feature3DPoints;
 
-            for (auto &kp : selected) {
-                int pixelX = (int)kp.pt.x;
-                int pixelY = (int)kp.pt.y;
+            // for (auto &kp : selected) {
+            //     int pixelX = (int)kp.pt.x;
+            //     int pixelY = (int)kp.pt.y;
 
-                // 1. read depth from depth buffer at this pixel
-                float depth;
-                glReadPixels(pixelX, viewport[3] - pixelY - 1, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
+            //     // 1. read depth from depth buffer at this pixel
+            //     float depth;
+            //     glReadPixels(pixelX, viewport[3] - pixelY - 1, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
 
-                // 2. unproject to world coordinates
-                GLdouble modelview[16], projection[16];
-                glGetDoublev(GL_MODELVIEW_MATRIX, modelview);
-                glGetDoublev(GL_PROJECTION_MATRIX, projection);
+            //     // 2. unproject to world coordinates
+            //     GLdouble modelview[16], projection[16];
+            //     glGetDoublev(GL_MODELVIEW_MATRIX, modelview);
+            //     glGetDoublev(GL_PROJECTION_MATRIX, projection);
 
-                GLdouble worldX, worldY, worldZ;
-                gluUnProject(pixelX, viewport[3] - pixelY - 1, depth,
-                            modelview, projection, viewport,
-                            &worldX, &worldY, &worldZ);
+            //     GLdouble worldX, worldY, worldZ;
+            //     gluUnProject(pixelX, viewport[3] - pixelY - 1, depth,
+            //                 modelview, projection, viewport,
+            //                 &worldX, &worldY, &worldZ);
 
-                feature3DPoints.push_back(cv::Point3f(worldX, worldY, worldZ));
-            }
-            realPickedPoints3D.push_back(feature3DPoints);
+            //     feature3DPoints.push_back(cv::Point3f(worldX, worldY, worldZ));
+            // }
+            // realPickedPoints3D.push_back(feature3DPoints);
 
             int key = cv::waitKey(0);
             showingScreenshots = false;
