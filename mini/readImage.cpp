@@ -917,7 +917,7 @@ void keyboard(unsigned char key, int x, int y) {
                 tvec,
                 false,
                 100,     // iterations
-                8.0,     // reprojection error in pixels
+                15.0,     // reprojection error in pixels
                 0.99,    // confidence
                 inliers  // <-- output inlier indices
             );
