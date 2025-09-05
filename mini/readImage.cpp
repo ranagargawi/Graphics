@@ -25,7 +25,7 @@ int mainWindow, globalWindow, epnpWindow;
 int activeWindow = 0;
 int currScreenshot = 0;
 bool showingScreenshots = false;
-bool preStage = true; //starting in the pre stage, moving to the run stage after taking the first 10 pictures
+bool preStage = false; //starting in the pre stage, moving to the run stage after taking the first 10 pictures
 
 vector<unsigned int> indices;
 Mat heightMap;
@@ -45,7 +45,7 @@ std::vector<vector<cv::KeyPoint>> imgsFeatures; // holds the features for each i
 std::vector<cv::Mat> imgsDescriptors; // holds the descriptor for each image in the pre-stage
 vector<cv::Point2f> matched2dlocations; // holds the 2d locations of the matched features in the run-stage
 vector<cv::Point3f> matched3dlocations; // holds the 3d locations of the matched features in the run-stage
-//std::vector<vector<cv::Point3f>> realPickedPoints3D; //for debugging
+std::vector<vector<cv::Point3f>> realPickedPoints3D; //for debugging
 int pp = 20;
 
 struct MyVec3f {
@@ -247,7 +247,7 @@ void display() {
             if(pickedGlobalIDs.size() > 0 && (pickedGlobalIDs.back()).size() > 0){
                 globalPickedNum = (int) (pickedGlobalIDs.back()).size();
             }
-            for (int idx = 0; idx < globalPickedNum + 1 && idx < 10; idx++) {
+            for (int idx = 0; idx < globalPickedNum + 1 && idx < pp; idx++) {
                 KeyPoint keypoint = (imgsFeatures.back()).at(idx);
                 // Pick color based on index
                 if (idx == 0) glColor3f(0.5f, 0.0f, 0.5f); //purple
@@ -521,7 +521,7 @@ void displayGlobalView(){
             float y = std::get<1>(pos) ;
             float z = std::get<2>(pos);
             float cameraYaw = std::get<3>(pos);
-
+            //cout << "draw a red triangle at " << to_string(x) << ", " << to_string(y) << ", " << to_string(z) << "\n";
             glPushMatrix();
             glTranslatef(x, y + 0.1f, z);  // slightly above ground
 
@@ -676,6 +676,13 @@ void mouseClick(int button, int state, int x, int y) {
                 (v0.z + v1.z + v2.z) / 3.0f
             );
             pickedPoints3D.back().push_back(cv::Point3f(center3D.x, center3D.y, center3D.z)); 
+            int imgInd = (int) pickedGlobalIDs.size() -1;
+            int pointInd = (int) pickedGlobalIDs.back().size() -1;
+            if((int) pickedGlobalIDs.back().size() -1 == 0){
+                pointInd = 0;
+            }
+            cout << "picked point at: " << to_string(center3D.x ) << ", " << to_string(center3D.y) << ", " << to_string(center3D.z) << "\n";
+            cout << "real point at: " << to_string(realPickedPoints3D[imgInd][pointInd].x) << ", " << to_string(realPickedPoints3D[imgInd][pointInd].y) << ", " << to_string(realPickedPoints3D[imgInd][pointInd].z) << "\n";
         
         }
         //if we're picking the first dot in the first picture- create new vectors and save the new picking dot
@@ -699,6 +706,11 @@ void mouseClick(int button, int state, int x, int y) {
             std::vector<cv::Point3f> newPointVec = std::vector<cv::Point3f>(0);
             pickedPoints3D.push_back(newPointVec);
             pickedPoints3D.back().push_back(cv::Point3f(center3D.x, center3D.y, center3D.z)); 
+            int imgInd = 0;
+            int pointInd = 0;
+            cout << "picked point at: " << to_string(center3D.x) << ", " << to_string(center3D.y) << ", " << to_string(center3D.z) << "\n";
+            cout << "real point at: " << to_string(realPickedPoints3D[imgInd][pointInd].x) << ", " << to_string(realPickedPoints3D[imgInd][pointInd].y) << ", " << to_string(realPickedPoints3D[imgInd][pointInd].z) << "\n";
+        
         }
         // the case where we're picking the last dot in a picture will be handled in the display global function
         glutPostWindowRedisplay(globalWindow);
@@ -804,30 +816,30 @@ void keyboard(unsigned char key, int x, int y) {
             imgsFeatures.push_back(selected);
             imgsDescriptors.push_back(selectedDesc);
 
-            // //saving the true 3d location for debugging
-            // std::vector<cv::Point3f> feature3DPoints;
+            //saving the true 3d location for debugging
+            std::vector<cv::Point3f> feature3DPoints;
 
-            // for (auto &kp : selected) {
-            //     int pixelX = (int)kp.pt.x;
-            //     int pixelY = (int)kp.pt.y;
+            for (auto &kp : selected) {
+                int pixelX = (int)kp.pt.x;
+                int pixelY = (int)kp.pt.y;
 
-            //     // 1. read depth from depth buffer at this pixel
-            //     float depth;
-            //     glReadPixels(pixelX, viewport[3] - pixelY - 1, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
+                // 1. read depth from depth buffer at this pixel
+                float depth;
+                glReadPixels(pixelX, viewport[3] - pixelY - 1, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
 
-            //     // 2. unproject to world coordinates
-            //     GLdouble modelview[16], projection[16];
-            //     glGetDoublev(GL_MODELVIEW_MATRIX, modelview);
-            //     glGetDoublev(GL_PROJECTION_MATRIX, projection);
+                // 2. unproject to world coordinates
+                GLdouble modelview[16], projection[16];
+                glGetDoublev(GL_MODELVIEW_MATRIX, modelview);
+                glGetDoublev(GL_PROJECTION_MATRIX, projection);
 
-            //     GLdouble worldX, worldY, worldZ;
-            //     gluUnProject(pixelX, viewport[3] - pixelY - 1, depth,
-            //                 modelview, projection, viewport,
-            //                 &worldX, &worldY, &worldZ);
+                GLdouble worldX, worldY, worldZ;
+                gluUnProject(pixelX, viewport[3] - pixelY - 1, depth,
+                            modelview, projection, viewport,
+                            &worldX, &worldY, &worldZ);
 
-            //     feature3DPoints.push_back(cv::Point3f(worldX, worldY, worldZ));
-            // }
-            // realPickedPoints3D.push_back(feature3DPoints);
+                feature3DPoints.push_back(cv::Point3f(worldX, worldY, worldZ));
+            }
+            realPickedPoints3D.push_back(feature3DPoints);
 
             int key = cv::waitKey(0);
             showingScreenshots = false;
@@ -886,11 +898,14 @@ void keyboard(unsigned char key, int x, int y) {
                 //save all of the matched features and their location to matched2dlocations and matched3dlocations
                 for(cv::DMatch m :goodMatches){
                     cv::KeyPoint newKP = selectedNew[m.queryIdx]; 
-                    matched2dlocations.push_back({newKP.pt.x, newKP.pt.y});
                     //cv::KeyPoint matchedOldKP = imgsFeatures[imgInd][m.trainIdx];
                     cv::Point3f point3d = pickedPoints3D[imgInd][m.trainIdx];
+                    if(point3d.x < 10 || point3d.z < 10){
+                        break;
+                    }
+                    matched2dlocations.push_back({newKP.pt.x, newKP.pt.y});
                     matched3dlocations.push_back({point3d.x, point3d.y, point3d.z}); 
-                    std::cout << "Matched old keypoint at: " << point3d.x << ", " << point3d.y << ", " << point3d.z << "\n";
+                    std::cout << "Matched old keypoint at: " << point3d.x << ", " << point3d.y << ", " << point3d.z << " in 2d location: " << newKP.pt.x << ", " << newKP.pt.y <<  "\n";
                 }
             }
 
@@ -939,10 +954,11 @@ void keyboard(unsigned char key, int x, int y) {
                 false,
                 100,     // iterations
                 15.0,     // reprojection error in pixels
-                0.99,    // confidence
+                0.90,    // confidence
                 inliers  // <-- output inlier indices
             );
             std::cout << "PnP inliers: " << inliers.rows << "/" << matched3dlocations.size() << std::endl;
+            
 
 
             cv::Mat R;
