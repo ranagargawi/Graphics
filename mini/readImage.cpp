@@ -247,7 +247,7 @@ void display() {
             if(pickedGlobalIDs.size() > 0 && (pickedGlobalIDs.back()).size() > 0){
                 globalPickedNum = (int) (pickedGlobalIDs.back()).size();
             }
-            for (int idx = 0; idx < globalPickedNum + 1 && idx < pp; idx++) {
+            for (int idx = 0; idx < globalPickedNum + 1 && idx < imgsFeatures.back().size(); idx++) { // pp
                 KeyPoint keypoint = (imgsFeatures.back()).at(idx);
                 // Pick color based on index
                 if (idx == 0) glColor3f(0.5f, 0.0f, 0.5f); //purple
@@ -315,10 +315,10 @@ void savePickedDataForAllImages() {
         string filename = "picked_points/img_" + std::to_string(imgIdx + 1) + "_features.yml";
         FileStorage fs(filename, FileStorage::WRITE);
         fs << "features" << "[";
-        for (size_t i = 0; i < pp; i++) {
+        for (size_t i = 0; i <  imgsFeatures[imgIdx].size(); i++) {
             const KeyPoint& kp = imgsFeatures[imgIdx][i];
             cv::Point3f point = pickedPoints3D[imgIdx][i];
-            //cv::Point3f realPoint = realPickedPoints3D[imgIdx][i];
+            cv::Point3f realPoint = realPickedPoints3D[imgIdx][i];
             fs << "{" << "x" << kp.pt.x << "y" << kp.pt.y
             << "size" << kp.size << "angle" << kp.angle
             << "response" << kp.response << "octave" << kp.octave
@@ -442,7 +442,7 @@ void displayGlobalView(){
             );
             glVertex3f(center.x, center.y, center.z);
             //check if we're on the last dot but not in the last picture
-            if(idx == pp-1 && pickedGlobalIDs.size() < 10){
+            if(idx ==  imgsFeatures.back().size()-1 && pickedGlobalIDs.size() < 10){ // pp
                 //create new empty vector for a new picture in pickedGlobalIDs
                 std::vector<int> newVec = std::vector<int>(0);
                 pickedGlobalIDs.push_back(newVec);
@@ -455,7 +455,7 @@ void displayGlobalView(){
                 glutPostWindowRedisplay(mainWindow);
             }
             //check if we're on the last dot in the last pictures
-            else if(idx == pp - 1 && pickedGlobalIDs.size() == 10){
+            else if(idx ==  imgsFeatures.back().size() - 1 && pickedGlobalIDs.size() == 10){ //pp
                 // create new file and write for each picture all it's features and their 3d location (saved on pickedPoints3D)
                     savePickedDataForAllImages();
                     preStage = false;
@@ -642,7 +642,7 @@ void renderForPickingGlobal() {
 void mouseClick(int button, int state, int x, int y) {
 
     //picking in the global window
-    if (glutGetWindow() == globalWindow && button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
+    if (preStage && glutGetWindow() == globalWindow && button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
         GLint viewport[4];
         glGetIntegerv(GL_VIEWPORT, viewport);
 
@@ -719,7 +719,7 @@ void mouseClick(int button, int state, int x, int y) {
     }
 }
 
-//keyboard function to move around - copyed from chatgpt
+//keyboard function to move around
 void keyboard(unsigned char key, int x, int y) {
     float radYaw = yaw * M_PI / 180.0f;
     float dirX = cos(radYaw);
@@ -788,7 +788,7 @@ void keyboard(unsigned char key, int x, int y) {
                 [&](int a, int b) { return features[a].response > features[b].response; });
 
             std::vector<cv::KeyPoint> selected;
-            cv::Mat selectedDesc;   // <-- descriptors for the selected keypoints
+            cv::Mat selectedDesc;  
             float minDist = 30.0;
             for (int idx : indices) {
                 const auto &kp = features[idx];
@@ -801,7 +801,7 @@ void keyboard(unsigned char key, int x, int y) {
                 }
                 if (good) {
                     selected.push_back(kp);
-                    selectedDesc.push_back(descriptors.row(idx));  // <-- keep the descriptor
+                    selectedDesc.push_back(descriptors.row(idx));  
                 }
                 if (selected.size() == pp) break;
             }
@@ -880,34 +880,140 @@ void keyboard(unsigned char key, int x, int y) {
             cv::Mat selectedDesc;
             orb->compute(img, selectedNew, selectedDesc);
 
-            //check feature matching with each of the previous images
+            // Improved feature matching - find best reference image first
+            std::vector<int> numMatches(10, 0);
+            std::vector<std::vector<cv::DMatch>> allGoodMatches(10);
+
+            // Count matches for each reference image
             for(int imgInd = 0; imgInd < 10; imgInd++){
                 cv::BFMatcher matcher(cv::NORM_HAMMING, false);
                 std::vector<std::vector<cv::DMatch>> knnMatches;
                 matcher.knnMatch(selectedDesc, imgsDescriptors[imgInd], knnMatches, 2);
 
-                std::vector<cv::DMatch> goodMatches;
                 for (size_t i = 0; i < knnMatches.size(); i++) {
                     if (knnMatches[i].size() < 2) continue;
                     if (knnMatches[i][0].distance < 0.75f * knnMatches[i][1].distance) {
-                        goodMatches.push_back(knnMatches[i][0]);
+                        allGoodMatches[imgInd].push_back(knnMatches[i][0]);
+                        numMatches[imgInd]++;
                     }
-                }
-                
-
-                //save all of the matched features and their location to matched2dlocations and matched3dlocations
-                for(cv::DMatch m :goodMatches){
-                    cv::KeyPoint newKP = selectedNew[m.queryIdx]; 
-                    //cv::KeyPoint matchedOldKP = imgsFeatures[imgInd][m.trainIdx];
-                    cv::Point3f point3d = pickedPoints3D[imgInd][m.trainIdx];
-                    if(point3d.x < 10 || point3d.z < 10){
-                        break;
-                    }
-                    matched2dlocations.push_back({newKP.pt.x, newKP.pt.y});
-                    matched3dlocations.push_back({point3d.x, point3d.y, point3d.z}); 
-                    std::cout << "Matched old keypoint at: " << point3d.x << ", " << point3d.y << ", " << point3d.z << " in 2d location: " << newKP.pt.x << ", " << newKP.pt.y <<  "\n";
                 }
             }
+
+            // Find best reference image
+            int bestImgIdx = std::distance(numMatches.begin(), 
+                                        std::max_element(numMatches.begin(), numMatches.end()));
+
+            if(numMatches[bestImgIdx] < 4) {
+                std::cout << "Not enough matches found. Best: " << numMatches[bestImgIdx] << std::endl;
+                break;
+            }
+
+            std::cout << "Using reference image " << bestImgIdx << " with " 
+                    << numMatches[bestImgIdx] << " matches" << std::endl;
+
+            // Use only matches from best reference image
+            matched2dlocations.clear();
+            matched3dlocations.clear();
+
+            for(const cv::DMatch& m : allGoodMatches[bestImgIdx]) {
+                cv::KeyPoint newKP = selectedNew[m.queryIdx]; 
+                cv::Point3f point3d = pickedPoints3D[bestImgIdx][m.trainIdx];
+                
+                // Validate 3D point
+                if(point3d.x < 0 || point3d.z < 0 || 
+                point3d.x > heightMap.cols || point3d.z > heightMap.rows) {
+                    continue;
+                }
+                
+                matched2dlocations.push_back(cv::Point2f(newKP.pt.x, newKP.pt.y));
+                matched3dlocations.push_back(point3d);
+            }
+
+
+
+            // //check feature matching with each of the previous images
+            // for(int imgInd = 0; imgInd < 10; imgInd++){
+            //     cv::BFMatcher matcher(cv::NORM_HAMMING, false);
+            //     std::vector<std::vector<cv::DMatch>> knnMatches;
+            //     matcher.knnMatch(selectedDesc, imgsDescriptors[imgInd], knnMatches, 2);
+
+            //     std::vector<cv::DMatch> goodMatches;
+            //     for (size_t i = 0; i < knnMatches.size(); i++) {
+            //         if (knnMatches[i].size() < 2) continue;
+            //         if (knnMatches[i][0].distance < 0.75f * knnMatches[i][1].distance) {
+            //             goodMatches.push_back(knnMatches[i][0]);
+            //         }
+            //     }
+                
+
+            //     //save all of the matched features and their location to matched2dlocations and matched3dlocations
+            //     for(cv::DMatch m :goodMatches){
+            //         cv::KeyPoint newKP = selectedNew[m.queryIdx]; 
+            //         //cv::KeyPoint matchedOldKP = imgsFeatures[imgInd][m.trainIdx];
+            //         cv::Point3f point3d = pickedPoints3D[imgInd][m.trainIdx];
+            //         matched2dlocations.push_back({newKP.pt.x, newKP.pt.y});
+            //         matched3dlocations.push_back({point3d.x, point3d.y, point3d.z}); 
+            //         std::cout << "Matched old keypoint at: " << point3d.x << ", " << point3d.y << ", " << point3d.z << " in 2d location: " << newKP.pt.x << ", " << newKP.pt.y <<  "\n";
+            //     }
+            // }
+
+            
+            // //count the number of matches for each image
+            //             vector<int> numOfMatches;
+            // for(int imgInd = 0; imgInd < 10; imgInd++){
+            //     cv::BFMatcher matcher(cv::NORM_HAMMING, false);
+            //     std::vector<std::vector<cv::DMatch>> knnMatches;
+            //     matcher.knnMatch(selectedDesc, imgsDescriptors[imgInd], knnMatches, 2);
+            //     int num;
+            //     std::vector<cv::DMatch> goodMatches;
+            //     for (size_t i = 0; i < knnMatches.size(); i++) {
+            //         if (knnMatches[i].size() < 2) continue;
+            //         if (knnMatches[i][0].distance < 0.75f * knnMatches[i][1].distance) {
+            //             num++;
+            //         }
+                    
+            //     }
+            //     numOfMatches.push_back(num);
+            // }
+            // //find the index of the image with max matches
+            // int maxNumInd = 0;
+            // int maxMatches = 0;
+            //  for(int imgInd = 0; imgInd < 10; imgInd++){
+            //     if(numOfMatches[imgInd] > maxMatches){
+            //         maxMatches = numOfMatches[imgInd];
+            //         maxNumInd = imgInd;
+            //     }
+            //  }
+
+            // // save the matches for the image with max matches
+            // cv::BFMatcher matcher(cv::NORM_HAMMING, false);
+            // std::vector<std::vector<cv::DMatch>> knnMatches;
+            // matcher.knnMatch(selectedDesc, imgsDescriptors[maxNumInd], knnMatches, 2);
+
+            // std::vector<cv::DMatch> goodMatches;
+            // for (size_t i = 0; i < knnMatches.size(); i++) {
+            //     if (knnMatches[i].size() < 2) continue;
+            //     if (knnMatches[i][0].distance < 0.75f * knnMatches[i][1].distance) {
+            //         goodMatches.push_back(knnMatches[i][0]);
+            //     }
+            // }
+            
+
+            // //save all of the matched features and their location to matched2dlocations and matched3dlocations
+            // for(cv::DMatch m :goodMatches){
+            //     cv::KeyPoint newKP = selectedNew[m.queryIdx]; 
+            //     //cv::KeyPoint matchedOldKP = imgsFeatures[imgInd][m.trainIdx];
+            //     cv::Point3f point3d = pickedPoints3D[maxNumInd][m.trainIdx];
+            //     if(point3d.x < 10 || point3d.z < 10){
+            //         break;
+            //     }
+            //     matched2dlocations.push_back({newKP.pt.x, newKP.pt.y});
+            //     matched3dlocations.push_back({point3d.x, point3d.y, point3d.z}); 
+            //     std::cout << "Matched old keypoint at: " << point3d.x << ", " << point3d.y << ", " << point3d.z << " in 2d location: " << newKP.pt.x << ", " << newKP.pt.y <<  "\n";
+            // }
+
+
+            
 
             cv::Mat outImg;
             cv::drawKeypoints(img, selectedNew, outImg, cv::Scalar(0,255,0));
@@ -943,6 +1049,26 @@ void keyboard(unsigned char key, int x, int y) {
                                                             0, fy, cy,
                                                             0, 0, 1);
 
+            // // Corrected camera matrix calculation for OpenGL gluPerspective
+            // int width = 1000, height = 800;
+            // double fovyDegrees = 45.0;
+            // double aspect = (double)width / height;
+
+            // // Convert FOV to focal length
+            // double fovyRadians = fovyDegrees * CV_PI / 180.0;
+            // double fy = height / (2.0 * tan(fovyRadians / 2.0));
+            // double fx = fy * aspect; // NOT just fy for non-square aspect ratios
+
+            // double cx = width / 2.0;
+            // double cy = height / 2.0;
+
+            // cv::Mat cameraMatrix = (cv::Mat_<double>(3,3) << 
+            //     fx,  0, cx,
+            //     0, fy, cy,
+            //     0,  0,  1);
+
+            // std::cout << "Camera matrix:" << std::endl << cameraMatrix << std::endl;
+
             //cv::solvePnP(matched3dlocations, matched2dlocations, cameraMatrix, cv::Mat::zeros(4, 1, CV_64F), rvec, tvec, false, cv::SOLVEPNP_EPNP);
             cv::solvePnPRansac(
                 matched3dlocations,
@@ -952,14 +1078,15 @@ void keyboard(unsigned char key, int x, int y) {
                 rvec,
                 tvec,
                 false,
-                100,     // iterations
-                15.0,     // reprojection error in pixels
-                0.90,    // confidence
+                1000,     // iterations
+                8.0,     // reprojection error in pixels
+                0.95,    // confidence
                 inliers  // <-- output inlier indices
             );
             std::cout << "PnP inliers: " << inliers.rows << "/" << matched3dlocations.size() << std::endl;
             
-
+            
+            
 
             cv::Mat R;
             cv::Rodrigues(rvec, R);  // convert rvec to 3x3 rotation matrix
@@ -1006,52 +1133,51 @@ void keyboard(unsigned char key, int x, int y) {
         }
         break;
     }
-    // computing ePnP
-    case 'C':
-    case 'c': {
-        // only on the run stage
-        if(!preStage){
-            if(pickedPoints2D.size() < 4 || pickedPoints3D.size() < 4){
-                cout << "not enough points picked" << "\n";
-                break;
-            }
+    // only relevant for A+B 
+    // case 'C':
+    // case 'c': {
+    //     // only on the run stage
+    //     if(!preStage){
+    //         if(pickedPoints2D.size() < 4 || pickedPoints3D.size() < 4){
+    //             cout << "not enough points picked" << "\n";
+    //             break;
+    //         }
 
-            cv::Mat rvec, tvec;
-            int width = 1000, height = 800;
-            double fovy = 45.0 * CV_PI / 180.0; // radians
-            double fy = height / (2.0 * tan(fovy / 2.0));
-            double fx = fy; // square pixels
-            double cx = width / 2.0;
-            double cy = height / 2.0;
+    //         cv::Mat rvec, tvec;
+    //         int width = 1000, height = 800;
+    //         double fovy = 45.0 * CV_PI / 180.0; // radians
+    //         double fy = height / (2.0 * tan(fovy / 2.0));
+    //         double fx = fy; // square pixels
+    //         double cx = width / 2.0;
+    //         double cy = height / 2.0;
 
-            cv::Mat cameraMatrix = (cv::Mat_<double>(3,3) << fx, 0, cx,
-                                                            0, fy, cy,
-                                                            0, 0, 1);
+    //         cv::Mat cameraMatrix = (cv::Mat_<double>(3,3) << fx, 0, cx,
+    //                                                         0, fy, cy,
+    //                                                         0, 0, 1);
 
-            cv::solvePnP(pickedPoints3D, pickedPoints2D, cameraMatrix, cv::Mat::zeros(4, 1, CV_64F), rvec, tvec, false, cv::SOLVEPNP_EPNP);
+    //         cv::solvePnP(pickedPoints3D, pickedPoints2D, cameraMatrix, cv::Mat::zeros(4, 1, CV_64F), rvec, tvec, false, cv::SOLVEPNP_EPNP);
 
-            cv::Mat R;
-            cv::Rodrigues(rvec, R);  // convert rvec to 3x3 rotation matrix
-            cv::Mat Rt = R.t();      // transpose
-            camPos = -Rt * tvec; // camera position in world coords
-            glm::vec3 forwardVec(R.at<double>(2,0), R.at<double>(2,1), R.at<double>(2,2));
-            glm::vec3 upVec(R.at<double>(1,0), R.at<double>(1,1), R.at<double>(1,2));
+    //         cv::Mat R;
+    //         cv::Rodrigues(rvec, R);  // convert rvec to 3x3 rotation matrix
+    //         cv::Mat Rt = R.t();      // transpose
+    //         camPos = -Rt * tvec; // camera position in world coords
+    //         glm::vec3 forwardVec(R.at<double>(2,0), R.at<double>(2,1), R.at<double>(2,2));
+    //         glm::vec3 upVec(R.at<double>(1,0), R.at<double>(1,1), R.at<double>(1,2));
 
-            double yaw = atan2(R.at<double>(1,0), R.at<double>(0,0));
-            ePnPPositions.emplace_back(camPos.at<double>(0), camPos.at<double>(1), camPos.at<double>(2), yaw);
-            std::cout << "ePnP camPos: " 
-            << camPos.at<double>(0) << ", "
-            << camPos.at<double>(1) << ", "
-            << camPos.at<double>(2) << "\n";
+    //         double yaw = atan2(R.at<double>(1,0), R.at<double>(0,0));
+    //         ePnPPositions.emplace_back(camPos.at<double>(0), camPos.at<double>(1), camPos.at<double>(2), yaw);
+    //         std::cout << "ePnP camPos: " 
+    //         << camPos.at<double>(0) << ", "
+    //         << camPos.at<double>(1) << ", "
+    //         << camPos.at<double>(2) << "\n";
 
-            //delete the picked points after the computation - TODO: update!
-            pickedPoints2D.clear();
-            pickedPoints3D.clear();
-            //pickedIDs.clear();
-            pickedGlobalIDs.clear();
-            }
-        //check if we need to display a new window of the world from the computed ePnP angles 
-    }
+    //         //delete the picked points after the computation - TODO: update!
+    //         pickedPoints2D.clear();
+    //         pickedPoints3D.clear();
+    //         //pickedIDs.clear();
+    //         pickedGlobalIDs.clear();
+    //         }
+    // }
     }
 
     glutPostRedisplay();  // Moved here
