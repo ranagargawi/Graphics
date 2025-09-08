@@ -248,6 +248,11 @@ void display() {
                 globalPickedNum = (int) (pickedGlobalIDs.back()).size();
             }
             for (int idx = 0; idx < globalPickedNum + 1 && idx < imgsFeatures.back().size(); idx++) { // pp
+            // int idx = 0; // test
+            // if(globalPickedNum < imgsFeatures.back().size()){ //test
+            //     idx = globalPickedNum; //test
+            // }
+            //     if(!(pickedGlobalIDs.size() > imgsFeatures.size())){//test
                 KeyPoint keypoint = (imgsFeatures.back()).at(idx);
                 // Pick color based on index
                 if (idx == 0) glColor3f(0.5f, 0.0f, 0.5f); //purple
@@ -271,7 +276,7 @@ void display() {
                 if (idx == 18) glColor3f(0.9f, 0.6f, 0.7f);  // salmon
                 if (idx >= 19) glColor3f(0.6f, 0.8f, 0.2f);  // lime green / chartreuse
                 glVertex2f(keypoint.pt.x, keypoint.pt.y);
-
+                //}//test
                 
             }
         glEnd();
@@ -406,6 +411,9 @@ void displayGlobalView(){
         glPointSize(10.0f); // Bigger dots
         glBegin(GL_POINTS);
         for (size_t idx = 0; idx < pickedGlobalIDs.back().size(); idx++) {
+
+        // int idx = pickedGlobalIDs.back().size() - 1; //test
+        // if (idx == -1) idx = 0; //test
             int id = pickedGlobalIDs.back().at(idx);
             int i = id * 3;
 
@@ -446,7 +454,7 @@ void displayGlobalView(){
                 //create new empty vector for a new picture in pickedGlobalIDs
                 std::vector<int> newVec = std::vector<int>(0);
                 pickedGlobalIDs.push_back(newVec);
-                cout << "pickedGlobalIDs size: " << pickedGlobalIDs.size() << "\n";
+                std::cout << "pickedGlobalIDs size: " << pickedGlobalIDs.size() << "\n";
                 //create new empty vector for a new picture in pickedPoints3D
                 std::vector<cv::Point3f> newPointVec = std::vector<cv::Point3f>(0);
                 pickedPoints3D.push_back(newPointVec);
@@ -756,7 +764,7 @@ void keyboard(unsigned char key, int x, int y) {
         camY -= moveSpeed;
         break;
     // taking screenshots of the current position in the main window and showing the location of the screenshot taken in the global window
-    case 'B':
+case 'B':
     case 'b': {
         GLint viewport[4];
         glGetIntegerv(GL_VIEWPORT, viewport);
@@ -806,15 +814,19 @@ void keyboard(unsigned char key, int x, int y) {
                 if (selected.size() == pp) break;
             }
         
+            // cv::Mat outImg;
+            // cv::drawKeypoints(img, selected, outImg, cv::Scalar(0,255,0));
+            // cv::Mat flipped2;
+            // cv::flip(outImg, flipped2, 0); 
+            // cv::Mat fixedImg;
+            // cv::cvtColor(flipped2, fixedImg, cv::COLOR_RGB2BGR);
+            // cv::imshow("Features", fixedImg);
+            // imgsFeatures.push_back(selected);
+            // imgsDescriptors.push_back(selectedDesc);
             cv::Mat outImg;
-            cv::drawKeypoints(img, selected, outImg, cv::Scalar(0,255,0));
-            cv::Mat flipped2;
-            cv::flip(outImg, flipped2, 0); 
-            cv::Mat fixedImg;
-            cv::cvtColor(flipped2, fixedImg, cv::COLOR_RGB2BGR);
-            cv::imshow("Features", fixedImg);
-            imgsFeatures.push_back(selected);
-            imgsDescriptors.push_back(selectedDesc);
+            cv::drawKeypoints(bgr, selected, outImg, cv::Scalar(0,255,0));
+            cv::imshow("Features", outImg);
+
 
             //saving the true 3d location for debugging
             std::vector<cv::Point3f> feature3DPoints;
@@ -915,7 +927,10 @@ void keyboard(unsigned char key, int x, int y) {
             matched2dlocations.clear();
             matched3dlocations.clear();
 
-            for(const cv::DMatch& m : allGoodMatches[bestImgIdx]) {
+            std::set<int> usedTrainIdx;
+            for (const cv::DMatch& m : allGoodMatches[bestImgIdx]) {
+                if (usedTrainIdx.count(m.trainIdx)) continue;
+                
                 cv::KeyPoint newKP = selectedNew[m.queryIdx]; 
                 cv::Point3f point3d = pickedPoints3D[bestImgIdx][m.trainIdx];
                 
@@ -924,9 +939,15 @@ void keyboard(unsigned char key, int x, int y) {
                 point3d.x > heightMap.cols || point3d.z > heightMap.rows) {
                     continue;
                 }
-                
+                usedTrainIdx.insert(m.trainIdx);
+                cout << "matched point at image " << bestImgIdx << " feature number " << m.trainIdx << "\n";
                 matched2dlocations.push_back(cv::Point2f(newKP.pt.x, newKP.pt.y));
                 matched3dlocations.push_back(point3d);
+                // OpenGL: (x, y, z)
+                // OpenCV: (x, -z, y)   // swap Y/Z and flip one axis
+                // cv::Point3f cvPoint3d(point3d.x, -point3d.z, point3d.y);
+                // matched3dlocations.push_back(cvPoint3d);
+
             }
 
 
@@ -1037,6 +1058,26 @@ void keyboard(unsigned char key, int x, int y) {
                 break;
             }
 
+            vector<Point2f> flippedmatched2dlocations;
+            for (auto &kp : matched2dlocations) {
+                cv::Point2f correctedPt(
+                    kp.x,
+                    bgr.rows - kp.y   // flip vertically
+                );
+                flippedmatched2dlocations.push_back(correctedPt);
+            }
+
+            vector<Point3f> flippedmatched3dlocations;
+            for (auto &kp : matched3dlocations) {
+                cv::Point3f correctedPt(
+                    kp.x,
+                    - kp.y,   // flip vertically
+                    kp.z
+                );
+                flippedmatched3dlocations.push_back(correctedPt);
+            }
+
+
             cv::Mat rvec, tvec, inliers;
             int width = 1000, height = 800;
             double fovy = 45.0 * CV_PI / 180.0; // radians
@@ -1052,12 +1093,12 @@ void keyboard(unsigned char key, int x, int y) {
             // // Corrected camera matrix calculation for OpenGL gluPerspective
             // int width = 1000, height = 800;
             // double fovyDegrees = 45.0;
-            // double aspect = (double)width / height;
+            //double aspect = (double)width / height;
 
             // // Convert FOV to focal length
             // double fovyRadians = fovyDegrees * CV_PI / 180.0;
             // double fy = height / (2.0 * tan(fovyRadians / 2.0));
-            // double fx = fy * aspect; // NOT just fy for non-square aspect ratios
+            // double fx = fy ; // NOT just fy for non-square aspect ratios
 
             // double cx = width / 2.0;
             // double cy = height / 2.0;
@@ -1071,8 +1112,8 @@ void keyboard(unsigned char key, int x, int y) {
 
             //cv::solvePnP(matched3dlocations, matched2dlocations, cameraMatrix, cv::Mat::zeros(4, 1, CV_64F), rvec, tvec, false, cv::SOLVEPNP_EPNP);
             cv::solvePnPRansac(
-                matched3dlocations,
-                matched2dlocations,
+                flippedmatched3dlocations,
+                flippedmatched2dlocations,
                 cameraMatrix,
                 cv::Mat::zeros(4, 1, CV_64F),
                 rvec,
@@ -1080,25 +1121,51 @@ void keyboard(unsigned char key, int x, int y) {
                 false,
                 1000,     // iterations
                 8.0,     // reprojection error in pixels
-                0.95,    // confidence
+                0.95,    // confidene
                 inliers  // <-- output inlier indices
             );
             std::cout << "PnP inliers: " << inliers.rows << "/" << matched3dlocations.size() << std::endl;
             
+            //debug:
             
+            // Project 3D points back to 2D
+            std::vector<cv::Point2f> projectedPoints;
+            cv::projectPoints(flippedmatched3dlocations, rvec, tvec, cameraMatrix, cv::Mat(), projectedPoints);
+
+            // Make a copy of your screenshot to draw on
+            cv::Mat debugImg = bgr.clone();
+
+            // Draw observed 2D points in red
+            for (auto &pt : flippedmatched2dlocations) {
+                cv::circle(debugImg, pt, 5, cv::Scalar(0,0,255), -1);
+            }
+
+            // Draw reprojected 3D points in green + line connecting to original
+            for (size_t i = 0; i < projectedPoints.size(); i++) {
+                cv::circle(debugImg, projectedPoints[i], 3, cv::Scalar(0,255,0), -1);
+                cv::line(debugImg, flippedmatched2dlocations[i], projectedPoints[i], cv::Scalar(255,0,0), 1);
+            }
+
+            // Show result
+            cv::imshow("PnP Debug", debugImg);
+            cv::waitKey(0);
+            if (key ==27){ // ESC
+                    cv::destroyWindow("PnP Debug");
+            }
             
 
             cv::Mat R;
             cv::Rodrigues(rvec, R);  // convert rvec to 3x3 rotation matrix
             cv::Mat Rt = R.t();      // transpose
+            
             camPos = -Rt * tvec; // camera position in world coords
             glm::vec3 forwardVec(R.at<double>(2,0), R.at<double>(2,1), R.at<double>(2,2));
             glm::vec3 upVec(R.at<double>(1,0), R.at<double>(1,1), R.at<double>(1,2));
 
             double yaw = atan2(R.at<double>(1,0), R.at<double>(0,0));
-            ePnPPositions.emplace_back(camPos.at<double>(0), camPos.at<double>(1), camPos.at<double>(2), yaw);
+            ePnPPositions.emplace_back(camPos.at<double>(0), -camPos.at<double>(1), camPos.at<double>(2), yaw);
             std::cout << "ePnP camPos: " << camPos.at<double>(0) << ", "
-            << camPos.at<double>(1) << ", " << camPos.at<double>(2) << "\n";
+            << -camPos.at<double>(1) << ", " << camPos.at<double>(2) << "\n";
 
             //clear the location vectors for the new image
             matched3dlocations.clear();
@@ -1109,30 +1176,7 @@ void keyboard(unsigned char key, int x, int y) {
         
         break;
     }
-    // showing the screenshots - TODO: check if need to be removed
-    case 'R': {
-        if (!screenshots.empty()) {
-            showingScreenshots = true;
-            currScreenshot = 0;
-            while (showingScreenshots) {
-                cv::imshow("Screenshot", screenshots[currScreenshot]);
-                int key = cv::waitKey(0);
-                switch (key) {
-                    case 27: // ESC
-                        showingScreenshots = false;
-                        cv::destroyWindow("Screenshot");
-                        break;
-                    case 81: // Left
-                        if (currScreenshot > 0) currScreenshot--;
-                        break;
-                    case 83: // Right
-                        if (currScreenshot < (int)screenshots.size() - 1) currScreenshot++;
-                        break;
-                }
-            }
-        }
-        break;
-    }
+
     // only relevant for A+B 
     // case 'C':
     // case 'c': {
