@@ -25,7 +25,7 @@ int mainWindow, globalWindow, epnpWindow;
 int activeWindow = 0;
 int currScreenshot = 0;
 bool showingScreenshots = false;
-bool preStage = false; //starting in the pre stage, moving to the run stage after taking the first 10 pictures
+bool preStage = true; //starting in the pre stage, moving to the run stage after taking the first 10 pictures
 
 vector<unsigned int> indices;
 Mat heightMap;
@@ -46,7 +46,7 @@ std::vector<cv::Mat> imgsDescriptors; // holds the descriptor for each image in 
 vector<cv::Point2f> matched2dlocations; // holds the 2d locations of the matched features in the run-stage
 vector<cv::Point3f> matched3dlocations; // holds the 3d locations of the matched features in the run-stage
 std::vector<vector<cv::Point3f>> realPickedPoints3D; //for debugging
-int pp = 20;
+int pp = 10;
 
 struct MyVec3f {
         float x, y, z;
@@ -814,18 +814,18 @@ case 'B':
                 if (selected.size() == pp) break;
             }
         
-            // cv::Mat outImg;
-            // cv::drawKeypoints(img, selected, outImg, cv::Scalar(0,255,0));
-            // cv::Mat flipped2;
-            // cv::flip(outImg, flipped2, 0); 
-            // cv::Mat fixedImg;
-            // cv::cvtColor(flipped2, fixedImg, cv::COLOR_RGB2BGR);
-            // cv::imshow("Features", fixedImg);
-            // imgsFeatures.push_back(selected);
-            // imgsDescriptors.push_back(selectedDesc);
             cv::Mat outImg;
-            cv::drawKeypoints(bgr, selected, outImg, cv::Scalar(0,255,0));
-            cv::imshow("Features", outImg);
+            cv::drawKeypoints(img, selected, outImg, cv::Scalar(0,255,0));
+            cv::Mat flipped2;
+            cv::flip(outImg, flipped2, 0); 
+            cv::Mat fixedImg;
+            cv::cvtColor(flipped2, fixedImg, cv::COLOR_RGB2BGR);
+            cv::imshow("Features", fixedImg);
+            imgsFeatures.push_back(selected);
+            imgsDescriptors.push_back(selectedDesc);
+            // cv::Mat outImg;
+            // cv::drawKeypoints(bgr, selected, outImg, cv::Scalar(0,255,0));
+            // cv::imshow("Features", outImg);
 
 
             //saving the true 3d location for debugging
