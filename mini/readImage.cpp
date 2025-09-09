@@ -25,7 +25,7 @@ int mainWindow, globalWindow, epnpWindow;
 int activeWindow = 0;
 int currScreenshot = 0;
 bool showingScreenshots = false;
-bool preStage = true; //starting in the pre stage, moving to the run stage after taking the first 10 pictures
+bool preStage = false; //starting in the pre stage, moving to the run stage after taking the first 10 pictures
 
 vector<unsigned int> indices;
 Mat heightMap;
@@ -46,7 +46,7 @@ std::vector<cv::Mat> imgsDescriptors; // holds the descriptor for each image in 
 vector<cv::Point2f> matched2dlocations; // holds the 2d locations of the matched features in the run-stage
 vector<cv::Point3f> matched3dlocations; // holds the 3d locations of the matched features in the run-stage
 std::vector<vector<cv::Point3f>> realPickedPoints3D; //for debugging
-int pp = 10;
+int pp = 20;
 
 struct MyVec3f {
         float x, y, z;
@@ -353,8 +353,8 @@ void displayGlobalView(){
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-    gluLookAt(850, 850, 2000, 600, 200, 1200, 0, 1, 0);
-
+    gluLookAt(800, 850, 600, 602, 460, 532, 0, 1, 0); // change to that on terrain1
+    //gluLookAt(850, 850, 2000, 600, 200, 1200, 0, 1, 0);
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
     glEnable(GL_COLOR_MATERIAL);
@@ -587,6 +587,7 @@ void renderForPicking() {
 
     //gluLookAt(400, 300, 800, 400, 300, 0, 0, 1, 0); //constant camera view version
 
+
     float radYaw = yaw * M_PI / 180.0f;
     float radPitch = pitch * M_PI / 180.0f;
     float dirX = cos(radPitch) * cos(radYaw);
@@ -625,7 +626,9 @@ void renderForPickingGlobal() {
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-    gluLookAt(850, 850, 2000, 600, 200, 1200, 0, 1, 0);
+    //gluLookAt(850, 850, 2000, 600, 200, 1200, 0, 1, 0); //heightmap
+    gluLookAt(800, 850, 600, 602, 460, 532, 0, 1, 0); // change to that on terrain1
+
 
     glDisable(GL_LIGHTING);
 
